@@ -153,6 +153,8 @@ func main() {
 			idht, err := dht.New(ctx, h)
 			return idht, err
 		}),
+		libp2p.EnableAutoRelay(),
+		libp2p.EnableNATService(),
 	)
 	if err != nil {
 		panic(err)
