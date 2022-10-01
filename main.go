@@ -9,8 +9,11 @@ import (
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/protocol"
+	"github.com/libp2p/go-libp2p-core/routing"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 
 	"github.com/multiformats/go-multiaddr"
 )
@@ -138,11 +141,18 @@ func main() {
 	// 0.0.0.0 will listen on any interface device.
 	sourceMultiAddr, _ := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/%s/tcp/%d", cfg.listenHost, cfg.listenPort))
 
+	//var idht *dht.IpfsDHT
+
 	// libp2p.New constructs a new libp2p Host.
 	// Other options can be added here.
 	host, err := libp2p.New(
 		libp2p.ListenAddrs(sourceMultiAddr),
 		libp2p.Identity(prvKey),
+		libp2p.NATPortMap(),
+		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
+			idht, err := dht.New(ctx, h)
+			return idht, err
+		}),
 	)
 	if err != nil {
 		panic(err)
@@ -162,6 +172,8 @@ func main() {
 	if err := host.Connect(ctx, peer); err != nil {
 		fmt.Println("Connection failed:", err)
 	}
+
+	fmt.Println(host.Peerstore())
 
 	// open a stream, this stream will be handled by handleStream other end
 	stream, err := host.NewStream(ctx, peer.ID, protocol.ID(cfg.ProtocolID))
