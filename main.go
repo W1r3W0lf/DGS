@@ -136,8 +136,7 @@ func main() {
 	prvKey, _ := loadKeys()
 
 	// 0.0.0.0 will listen on any interface device.
-	//sourceMultiAddr, _ := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/%s/tcp/%d", cfg.listenHost, cfg.listenPort))
-	sourceMultiAddr, _ := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/%s/tcp/%d", cfg.listenHost, 4422))
+	sourceMultiAddr, _ := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/%s/tcp/%d", cfg.listenHost, cfg.listenPort))
 
 	// libp2p.New constructs a new libp2p Host.
 	// Other options can be added here.
