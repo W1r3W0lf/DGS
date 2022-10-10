@@ -185,27 +185,30 @@ func main() {
 		panic(err)
 	}
 
-	for peer := range peerChan {
-		if peer.ID == host.ID() {
-			continue
+	for {
+		select {
+		case peer := <-peerChan:
+			if peer.ID == host.ID() {
+				continue
+			}
+			logger.Debug("Found peer:", peer)
+
+			logger.Debug("Connecting to:", peer)
+			stream, err := host.NewStream(ctx, peer.ID, protocol.ID(config.ProtocolID))
+
+			if err != nil {
+				logger.Warning("Connection failed:", err)
+				continue
+			} else {
+				rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
+
+				go writeData(rw)
+				go readData(rw)
+			}
+
+			logger.Info("Connected to:", peer)
+
 		}
-		logger.Debug("Found peer:", peer)
-
-		logger.Debug("Connecting to:", peer)
-		stream, err := host.NewStream(ctx, peer.ID, protocol.ID(config.ProtocolID))
-
-		if err != nil {
-			logger.Warning("Connection failed:", err)
-			continue
-		} else {
-			rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
-
-			go writeData(rw)
-			go readData(rw)
-		}
-
-		logger.Info("Connected to:", peer)
 	}
 
-	select {}
 }
