@@ -15,6 +15,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/protocol"
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
+	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/multiformats/go-multiaddr"
@@ -97,11 +98,33 @@ func main() {
 
 	prvKey, _ := loadKeys()
 
+	// Start with the default scaling limits.
+	scalingLimits := rcmgr.DefaultLimits
+
+	// Add limits around included libp2p protocols
+	libp2p.SetDefaultServiceLimits(&scalingLimits)
+
+	// Turn the scaling limits into a static set of limits using `.AutoScale`. This
+	// scales the limits proportional to your system memory.
+	limits := scalingLimits.AutoScale()
+
+	// The resource manager expects a limiter, se we create one from our limits.
+	limiter := rcmgr.NewFixedLimiter(limits)
+
+	//limiter := rcmgr.NewFixedLimiter(rcmgr.InfiniteLimits)
+
+	// Initialize the resource manager
+	rm, err := rcmgr.NewResourceManager(limiter)
+	if err != nil {
+		panic(err)
+	}
+
 	// libp2p.New constructs a new libp2p Host. Other options can be added
 	// here.
 	host, err := libp2p.New(
 		libp2p.ListenAddrs([]multiaddr.Multiaddr(config.ListenAddresses)...),
 		libp2p.Identity(prvKey),
+		libp2p.ResourceManager(rm),
 	)
 	if err != nil {
 		panic(err)
