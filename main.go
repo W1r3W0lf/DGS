@@ -54,9 +54,12 @@ func main() {
 		//fmt.Scanln(&rawCommand)
 		inputReader := bufio.NewReader(os.Stdin)
 		rawCommand, _ = inputReader.ReadString('\n')
+		fmt.Println(rawCommand)
+		rawCommand = strings.TrimSuffix(rawCommand, "\n")
 
 		// Parse command
 		command := strings.Split(rawCommand, " ")
+		fmt.Println(command)
 
 		switch command[0] {
 		case "new":
@@ -74,7 +77,7 @@ func main() {
 				go repo.Run(repoChan)
 			}
 		default:
-			repoChan <- rawCommand
+			//repoChan <- rawCommand
 		}
 
 	}
