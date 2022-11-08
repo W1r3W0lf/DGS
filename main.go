@@ -48,6 +48,9 @@ func main() {
 
 	var repo repository
 	repoStarted := false
+
+	var peerList = make([]Node, 1)
+
 	for running {
 		//Take user input
 		fmt.Print(">")
@@ -76,8 +79,31 @@ func main() {
 				repo = openRepository(command[1])
 				go repo.Run(repoChan)
 			}
+		case "connect":
+			if len(command) == 4 {
+				var newPeer Node
+				newPeer.name = command[2]
+				newPeer.address = command[3]
+				if command[1] == "serv" {
+					fmt.Println("Starting Server")
+					newPeer = newServerNode(command[2], command[3])
+				} else {
+					fmt.Println("Connecting to Server")
+					newPeer = newClientNode(command[2], command[3])
+				}
+				fmt.Println("a")
+				peerList = append(peerList, newPeer)
+			} else {
+				fmt.Println("Error not enough arguments\nconnect serv/client name ip:port")
+			}
+		case "help":
+			fmt.Println("new PATH\n open NAME\n connect serv/client name ip:port")
 		default:
-			//repoChan <- rawCommand
+			if repoStarted {
+				repoChan <- rawCommand
+			} else {
+				fmt.Println("Unknown command\nRepo Not started")
+			}
 		}
 
 	}
@@ -101,7 +127,7 @@ func main() {
 		return
 	}
 
-	host := newNode(config)
+	host := newP2PNode(config)
 
 	connectToNetwork(host, config)
 

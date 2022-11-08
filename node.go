@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"sync"
 
@@ -17,6 +18,57 @@ import (
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
 	"github.com/multiformats/go-multiaddr"
 )
+
+type NodeP2P struct {
+	host.Host
+	DHT *dht.IpfsDHT
+}
+
+type Node struct {
+	name    string
+	address string
+	reader  *bufio.Reader
+	writer  *bufio.Writer
+}
+
+func newServerNode(name string, address string) Node {
+	var node Node
+	// Set the node's name
+	node.name = name
+	node.address = address
+
+	listen, err := net.Listen("tcp", address)
+	if err != nil {
+		fmt.Fprint(os.Stderr, "ERORR listaning", err.Error)
+		panic(err)
+	}
+	conn, err := listen.Accept()
+	if err != nil {
+		fmt.Fprint(os.Stderr, "ERORR connecting to clinet", err.Error)
+		panic(err)
+	}
+	node.reader = bufio.NewReader(conn)
+	node.writer = bufio.NewWriter(conn)
+
+	return node
+}
+
+func newClientNode(name string, address string) Node {
+	var node Node
+	// Set the node's name
+	node.name = name
+	node.address = address
+
+	conn, err := net.Dial("tcp", address)
+	if err != nil {
+		fmt.Fprint(os.Stderr, "ERORR listaning", err.Error)
+		panic(err)
+	}
+	node.reader = bufio.NewReader(conn)
+	node.writer = bufio.NewWriter(conn)
+
+	return node
+}
 
 /*
 func newLimiter() network.ResourceManagerState {
@@ -46,12 +98,7 @@ func newLimiter() network.ResourceManagerState {
 }
 */
 
-type Node struct {
-	host.Host
-	DHT *dht.IpfsDHT
-}
-
-func newNode(config Config) host.Host {
+func newP2PNode(config Config) host.Host {
 
 	prvKey, _ := loadKeys()
 
