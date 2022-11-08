@@ -4,77 +4,103 @@ import (
 	"bufio"
 	"fmt"
 	"net"
+	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/go-git/go-git/v5"
 )
 
-type repoPeer struct {
-	name  string
-	read  *bufio.Reader
-	write *bufio.Writer
+type Repository struct {
+	name        string // The name of the repository
+	path        string // The path to where the User is linked to
+	backingPath string // The location where all of the diffrent versions are stored
+	initilised  bool   // Has the repository been set up yet
+	peers       []Node // All connected Peers
+	appPeers    []Node // All connected and disconnected Peers
 }
 
-func newRepoPeer(name string, port int) repoPeer {
+func newRepository(path string) Repository {
 
-	var rp repoPeer
+	var repo Repository
 
-	rp.name = name
+	repo.name = filepath.Base(path)
 
-	if port == 0 {
-		// Listen for connections
+	repo.backingPath = "./repos/" + filepath.Base(path) + "-vs/"
 
-		// Print out the port we are listanign on
+	repo.path = "./repos/" + filepath.Base(path)
 
-	} else {
-		conn, err := net.Dial("tcp", "127.0.0.1:8585")
-		if err != nil {
-			fmt.Println("Error connecting", err.Error)
-			panic(err)
-		}
-		rp.read = bufio.NewReader(conn)
-		rp.write = bufio.NewWriter(conn)
+	git.PlainClone(repo.path, true, &git.CloneOptions{URL: path})
+
+	err := os.Symlink(repo.backingPath+repo.name, repo.path)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error makeing symlink to repo", err.Error)
+		panic(err)
 	}
 
-	return rp
+	repo.initilised = true
+
+	return repo
 }
 
-type repository struct {
-	name       string
-	path       string
-	initilised bool
-	peers      []repoPeer
+func openRepository(path string) Repository {
+
+	var repo Repository
+
+	repo.name = filepath.Base(path)
+
+	repo.path = "./repos/" + filepath.Base(path)
+
+	repo.backingPath = "./repos/" + filepath.Base(path) + "-vs/"
+
+	repo.initilised = true
+
+	return repo
 }
 
-func newRepository(path string) repository {
+func cloneRepository(address string) Repository {
 
-	var newRepo repository
+	var repo Repository
+	var node Node
 
-	newRepo.name = filepath.Base(path)
+	node.address = address
 
-	newRepo.path = "./repos/" + filepath.Base(path)
+	// Make a TCP connection to the server
+	conn, err := net.Dial("tcp", address)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error connecting", err.Error)
+		panic(err)
+	}
+	reader := bufio.NewReader(conn)
 
-	git.PlainClone(newRepo.path, true, &git.CloneOptions{
-		URL: path})
-	//err := filepath.Walk
+	// Send the clone command
 
-	return newRepo
+	// Get the Repository name, and the server's peer name
+	node.name, err = reader.ReadString('\n')
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error Getting Peer's name", err.Error)
+		panic(err)
+	}
+
+	repo.name, err = reader.ReadString('\n')
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error Getting Peer's name", err.Error)
+		panic(err)
+	}
+
+	// Download the repository to ./repos/NAME
+	repo.path = "./repos/" + repo.name
+
+	// Get the number of bytes that need to be accepted
+
+	// Open the Repository
+
+	repo.initilised = true
+
+	return repo
 }
 
-func openRepository(path string) repository {
-
-	var openedRepo repository
-
-	openedRepo.name = filepath.Base(path)
-
-	openedRepo.path = "./repos/" + filepath.Base(path)
-
-	return openedRepo
-}
-
-func (repo *repository) Run(commandChannel chan string) {
+func (repo *Repository) Run(commandChannel chan string) {
 	fmt.Println("Strting", repo.name)
 
 	// At this point the only way of setting up a repo is by cloneing
@@ -93,10 +119,19 @@ func (repo *repository) Run(commandChannel chan string) {
 		case "pull":
 			pullFromPeer(repo, command[1])
 		case "accept":
-			repo.peers = append(repo.peers, newRepoPeer(command[1], 0))
+			if len(command) == 3 {
+				fmt.Println("Starting Server")
+				repo.peers = append(repo.peers, newServerNode(command[1], command[2]))
+			} else {
+				fmt.Println("Incorrect number of arguments")
+			}
 		case "connect":
-			peerPort, _ := strconv.Atoi(command[2])
-			repo.peers = append(repo.peers, newRepoPeer(command[1], peerPort))
+			if len(command) == 3 {
+				fmt.Println("Connecting to Server")
+				repo.peers = append(repo.peers, newClientNode(command[1], command[2]))
+			} else {
+				fmt.Println("Incorrect number of arguments")
+			}
 		default:
 			fmt.Println("Unknown command", cmd)
 		}
@@ -107,7 +142,7 @@ func (repo *repository) Run(commandChannel chan string) {
 
 	// Execute peer commands
 	for _, peer := range repo.peers {
-		rawMessage, _ := peer.read.ReadString('\n')
+		rawMessage, _ := peer.reader.ReadString('\n')
 
 		message := strings.Split(rawMessage, "\n")
 
@@ -120,14 +155,14 @@ func (repo *repository) Run(commandChannel chan string) {
 
 }
 
-func pullFromPeer(repo *repository, peer string) {
+func pullFromPeer(repo *Repository, peer string) {
 
 }
 
-func cloneRepo(repo *repository) {
+func cloneRepo(repo *Repository) {
 
 }
 
-func pushToPeer(repo *repository, peer repoPeer) {
+func pushToPeer(repo *Repository, peer Node) {
 
 }

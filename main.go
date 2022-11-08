@@ -46,10 +46,8 @@ func main() {
 	running := true
 	var rawCommand string
 
-	var repo repository
-	repoStarted := false
-
-	var peerList = make([]Node, 1)
+	var repo Repository
+	repo.initilised = false
 
 	for running {
 		//Take user input
@@ -66,40 +64,30 @@ func main() {
 
 		switch command[0] {
 		case "new":
-			if repoStarted {
-
+			if repo.initilised {
+				fmt.Println("Repo alredy initilised")
 			} else {
 				repo = newRepository(command[1])
 				go repo.Run(repoChan)
 			}
 		case "open":
-			if repoStarted {
-
+			if repo.initilised {
+				fmt.Println("Repo alredy initilised")
 			} else {
 				repo = openRepository(command[1])
 				go repo.Run(repoChan)
 			}
-		case "connect":
-			if len(command) == 4 {
-				var newPeer Node
-				newPeer.name = command[2]
-				newPeer.address = command[3]
-				if command[1] == "serv" {
-					fmt.Println("Starting Server")
-					newPeer = newServerNode(command[2], command[3])
-				} else {
-					fmt.Println("Connecting to Server")
-					newPeer = newClientNode(command[2], command[3])
-				}
-				fmt.Println("a")
-				peerList = append(peerList, newPeer)
+		case "clone":
+			if repo.initilised {
+				fmt.Println("Repo alredy initilised")
 			} else {
-				fmt.Println("Error not enough arguments\nconnect serv/client name ip:port")
+				repo = cloneRepository(command[1])
+				go repo.Run(repoChan)
 			}
 		case "help":
-			fmt.Println("new PATH\n open NAME\n connect serv/client name ip:port")
+			fmt.Println("new PATH\nopen NAME\nconnect name ip:port\naccept name ip:port")
 		default:
-			if repoStarted {
+			if repo.initilised {
 				repoChan <- rawCommand
 			} else {
 				fmt.Println("Unknown command\nRepo Not started")
