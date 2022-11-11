@@ -25,17 +25,16 @@ type NodeP2P struct {
 }
 
 type Node struct {
-	name    string
-	address string
-	reader  *bufio.Reader
-	writer  *bufio.Writer
+	Name    string
+	Address string
+	Reader  *bufio.Reader
+	Writer  *bufio.Writer
 }
 
-func newServerNode(name string, address string) Node {
+func newServerNode(address string, myName string, fullNodeList *[]Node) Node {
 	var node Node
 	// Set the node's name
-	node.name = name
-	node.address = address
+	node.Address = address
 
 	listen, err := net.Listen("tcp", address)
 	if err != nil {
@@ -47,25 +46,67 @@ func newServerNode(name string, address string) Node {
 		fmt.Fprint(os.Stderr, "ERORR connecting to clinet", err.Error)
 		panic(err)
 	}
-	node.reader = bufio.NewReader(conn)
-	node.writer = bufio.NewWriter(conn)
+	node.Reader = bufio.NewReader(conn)
+	node.Writer = bufio.NewWriter(conn)
+
+	mode, err := node.Reader.ReadString('\n')
+	if err != nil {
+		fmt.Fprint(os.Stderr, "ERORR getting data from clinet", err.Error)
+		panic(err)
+	}
+
+	switch mode {
+	case "clone":
+		// Send my name to peer
+
+		// Send repository name
+
+		// Compress My repository
+
+		// Get the size of the compressed repository
+
+		// Send the size of the repository
+
+		// Send the compressed repository
+
+		// Get the client's name
+
+	case "connect":
+		// Send my name to peer
+		fmt.Fprintf(conn, myName)
+
+		// Get client's name
+
+		// Search for the client's name
+
+		// If not found throw an error
+	}
 
 	return node
 }
 
-func newClientNode(name string, address string) Node {
+func newClientNode(address string) Node {
 	var node Node
 	// Set the node's name
-	node.name = name
-	node.address = address
+	node.Address = address
 
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
 		fmt.Fprint(os.Stderr, "ERORR listaning", err.Error)
 		panic(err)
 	}
-	node.reader = bufio.NewReader(conn)
-	node.writer = bufio.NewWriter(conn)
+	node.Reader = bufio.NewReader(conn)
+	node.Writer = bufio.NewWriter(conn)
+
+	fmt.Fprintf(conn, "connect")
+
+	// Get the server's name
+
+	// Send my name
+	var name string
+	fmt.Println("What's your name?")
+	fmt.Fscanln(os.Stdin, name)
+	fmt.Fprintf(conn, name)
 
 	return node
 }

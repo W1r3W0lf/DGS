@@ -3,42 +3,46 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/go-git/go-git/v5"
 )
 
 type Repository struct {
-	name        string // The name of the repository
-	path        string // The path to where the User is linked to
-	backingPath string // The location where all of the diffrent versions are stored
-	initilised  bool   // Has the repository been set up yet
-	peers       []Node // All connected Peers
-	appPeers    []Node // All connected and disconnected Peers
+	Name        string // The name of the repository
+	Path        string // The path to where the User is linked to
+	BackingPath string // The location where all of the diffrent versions are stored
+	Initilised  bool   // Has the repository been set up yet
+	Self        string // The name of this node
+	Peers       []Node // All connected Peers
+	AllPeers    []Node // All connected and disconnected Peers
 }
 
 func newRepository(path string) Repository {
 
 	var repo Repository
 
-	repo.name = filepath.Base(path)
+	repo.Name = filepath.Base(path)
 
-	repo.backingPath = "./repos/" + filepath.Base(path) + "-vs/"
+	repo.BackingPath = "./repos/" + filepath.Base(path) + "-vs/"
 
-	repo.path = "./repos/" + filepath.Base(path)
+	repo.Path = "./repos/" + filepath.Base(path)
 
-	git.PlainClone(repo.path, true, &git.CloneOptions{URL: path})
+	git.PlainClone(repo.Path, true, &git.CloneOptions{URL: path})
 
-	err := os.Symlink(repo.backingPath+repo.name, repo.path)
+	err := os.Symlink(repo.BackingPath+repo.Name, repo.Path)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error makeing symlink to repo", err.Error)
 		panic(err)
 	}
 
-	repo.initilised = true
+	repo.Initilised = true
 
 	return repo
 }
@@ -47,13 +51,13 @@ func openRepository(path string) Repository {
 
 	var repo Repository
 
-	repo.name = filepath.Base(path)
+	repo.Name = filepath.Base(path)
 
-	repo.path = "./repos/" + filepath.Base(path)
+	repo.Path = "./repos/" + filepath.Base(path)
 
-	repo.backingPath = "./repos/" + filepath.Base(path) + "-vs/"
+	repo.BackingPath = "./repos/" + filepath.Base(path) + "-vs/"
 
-	repo.initilised = true
+	repo.Initilised = true
 
 	return repo
 }
@@ -63,7 +67,7 @@ func cloneRepository(address string) Repository {
 	var repo Repository
 	var node Node
 
-	node.address = address
+	node.Address = address
 
 	// Make a TCP connection to the server
 	conn, err := net.Dial("tcp", address)
@@ -74,40 +78,68 @@ func cloneRepository(address string) Repository {
 	reader := bufio.NewReader(conn)
 
 	// Send the clone command
+	fmt.Fprintf(conn, "clone\n")
 
 	// Get the Repository name, and the server's peer name
-	node.name, err = reader.ReadString('\n')
+	node.Name, err = reader.ReadString('\n')
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error Getting Peer's name", err.Error)
 		panic(err)
 	}
 
-	repo.name, err = reader.ReadString('\n')
+	repo.Name, err = reader.ReadString('\n')
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error Getting Peer's name", err.Error)
+		fmt.Fprintf(os.Stderr, "Error Getting Repository's name", err.Error)
 		panic(err)
 	}
-
-	// Download the repository to ./repos/NAME
-	repo.path = "./repos/" + repo.name
 
 	// Get the number of bytes that need to be accepted
+	repoSizeString, err := reader.ReadString('\n')
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error Getting Peer's name", err.Error)
+		panic(err)
+	}
+	repoSize, _ := strconv.Atoi(repoSizeString)
+	buffer := make([]byte, repoSize)
+
+	// Download the repository to ./repos/NAME
+	repo.Path = "./repos/" + repo.Name
+
+	n, err := io.ReadFull(reader, buffer)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error Downloading Repository", err.Error)
+		panic(err)
+	}
+
+	if n != repoSize {
+		fmt.Println("Didn't recive enough bytes")
+	}
+
+	/*
+		// Write Repository to disk
+		f, err := os.Create(repo.name + "tar.gz")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error Writting Repository", err.Error)
+			panic(err)
+		}
+		defer f.Close()
+	*/
+
+	ioutil.WriteFile(repo.Name+"tar.gz", buffer, 0644)
+
+	// Extract compressed Repository
 
 	// Open the Repository
 
-	repo.initilised = true
+	// Send my name to the server
+
+	repo.Initilised = true
 
 	return repo
 }
 
 func (repo *Repository) Run(commandChannel chan string) {
-	fmt.Println("Strting", repo.name)
-
-	// At this point the only way of setting up a repo is by cloneing
-	if !repo.initilised {
-		cloneRepo(repo)
-		repo.initilised = true
-	}
+	fmt.Println("Strting", repo.Name)
 
 	var cmd string
 	// Execute user commands
@@ -117,18 +149,18 @@ func (repo *Repository) Run(commandChannel chan string) {
 
 		switch command[0] {
 		case "pull":
-			pullFromPeer(repo, command[1])
+			pullRequest(repo, command[1])
 		case "accept":
-			if len(command) == 3 {
+			if len(command) == 2 {
 				fmt.Println("Starting Server")
-				repo.peers = append(repo.peers, newServerNode(command[1], command[2]))
+				repo.Peers = append(repo.Peers, newServerNode(command[1], repo.Self, &repo.AllPeers))
 			} else {
 				fmt.Println("Incorrect number of arguments")
 			}
 		case "connect":
-			if len(command) == 3 {
+			if len(command) == 2 {
 				fmt.Println("Connecting to Server")
-				repo.peers = append(repo.peers, newClientNode(command[1], command[2]))
+				repo.Peers = append(repo.Peers, newClientNode(command[1]))
 			} else {
 				fmt.Println("Incorrect number of arguments")
 			}
@@ -141,28 +173,29 @@ func (repo *Repository) Run(commandChannel chan string) {
 	}
 
 	// Execute peer commands
-	for _, peer := range repo.peers {
-		rawMessage, _ := peer.reader.ReadString('\n')
+	for _, peer := range repo.Peers {
+		rawMessage, _ := peer.Reader.ReadString('\n')
 
 		message := strings.Split(rawMessage, "\n")
 
 		switch message[0] {
 		case "pull":
-			pushToPeer(repo, peer)
+			pullAccept(repo, peer)
+		default:
 		}
 
 	}
 
 }
 
-func pullFromPeer(repo *Repository, peer string) {
+func cloneAccept(repo *Repository) {
 
 }
 
-func cloneRepo(repo *Repository) {
+func pullRequest(repo *Repository, peer string) {
 
 }
 
-func pushToPeer(repo *Repository, peer Node) {
+func pullAccept(repo *Repository, peer Node) {
 
 }
