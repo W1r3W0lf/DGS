@@ -15,13 +15,14 @@ import (
 )
 
 type Repository struct {
-	Name        string // The name of the repository
-	Path        string // The path to where the User is linked to
-	BackingPath string // The location where all of the diffrent versions are stored
-	Initilised  bool   // Has the repository been set up yet
-	Self        string // The name of this node
-	Peers       []Node // All connected Peers
-	AllPeers    []Node // All connected and disconnected Peers
+	Name       string // The name of the repository
+	LinkPath   string // The path to where the User is linked to
+	ActiveRepo string // The path to where the active repository is
+	RepoStore  string // The location where all of the diffrent versions are stored
+	Initilised bool   // Has the repository been set up yet
+	Self       string // The name of this node
+	Peers      []Node // All connected Peers
+	AllPeers   []Node // All connected and disconnected Peers
 }
 
 func newRepository(path string) Repository {
@@ -30,13 +31,19 @@ func newRepository(path string) Repository {
 
 	repo.Name = filepath.Base(path)
 
-	repo.BackingPath = "./repos/" + filepath.Base(path) + "-vs/"
+	repo.RepoStore = "./repos/" + filepath.Base(path) + "-vs/"
 
-	repo.Path = "./repos/" + filepath.Base(path)
+	repo.LinkPath = "./repos/" + filepath.Base(path)
 
-	git.PlainClone(repo.Path, true, &git.CloneOptions{URL: path})
+	git.PlainClone(repo.RepoStore+repo.Name, true, &git.CloneOptions{URL: path})
 
-	err := os.Symlink(repo.BackingPath+repo.Name, repo.Path)
+	abs, err := filepath.Abs(repo.RepoStore + repo.Name)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error abs path", err.Error)
+		panic(err)
+	}
+
+	err = os.Symlink(abs, repo.LinkPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error makeing symlink to repo", err.Error)
 		panic(err)
@@ -53,9 +60,9 @@ func openRepository(path string) Repository {
 
 	repo.Name = filepath.Base(path)
 
-	repo.Path = "./repos/" + filepath.Base(path)
+	repo.LinkPath = "./repos/" + filepath.Base(path)
 
-	repo.BackingPath = "./repos/" + filepath.Base(path) + "-vs/"
+	repo.RepoStore = "./repos/" + filepath.Base(path) + "-vs/"
 
 	repo.Initilised = true
 
@@ -102,8 +109,8 @@ func cloneRepository(address string) Repository {
 	repoSize, _ := strconv.Atoi(repoSizeString)
 	buffer := make([]byte, repoSize)
 
-	// Download the repository to ./repos/NAME
-	repo.Path = "./repos/" + repo.Name
+	// Download the repository to ./repos/NAME-vs/NAME
+	repo.RepoStore = "./repos/" + repo.Name
 
 	n, err := io.ReadFull(reader, buffer)
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/libp2p/go-libp2p"
@@ -38,7 +39,6 @@ func newServerNode(address string, repo *Repository) Node {
 	// Set the node's name
 	node.Address = address
 
-	fmt.Println("Listaning for connections")
 	listen, err := net.Listen("tcp", address)
 	if err != nil {
 		fmt.Fprint(os.Stderr, "ERORR listaning", err.Error)
@@ -60,16 +60,26 @@ func newServerNode(address string, repo *Repository) Node {
 		panic(err)
 	}
 
+	mode = strings.TrimSuffix(mode, "\n")
+	fmt.Println(mode)
+
 	switch mode {
 	case "clone":
+		fmt.Println("Sending name")
 		// Send my name to peer
 		fmt.Fprintf(conn, repo.Self)
 
+		fmt.Println("Sending repo name")
 		// Send repository name
 		fmt.Fprintf(conn, repo.Name)
 
+		fmt.Println("Compressing file")
 		// Compress My repository
-		repoTarPath := compressRepo(repo.Path)
+		repoTarPath, err := compressRepo(repo.ActiveRepo)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Error compressing tar file", err.Error())
+			panic(err)
+		}
 
 		// Get the size of the compressed repository
 		repoTar, err := os.Open(repoTarPath)
