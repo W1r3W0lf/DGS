@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"os"
+	"strconv"
 	"sync"
 
 	"github.com/libp2p/go-libp2p"
@@ -31,7 +33,7 @@ type Node struct {
 	Writer  *bufio.Writer
 }
 
-func newServerNode(address string, myName string, fullNodeList *[]Node) Node {
+func newServerNode(address string, repo *Repository) Node {
 	var node Node
 	// Set the node's name
 	node.Address = address
@@ -58,24 +60,47 @@ func newServerNode(address string, myName string, fullNodeList *[]Node) Node {
 	switch mode {
 	case "clone":
 		// Send my name to peer
+		fmt.Fprintf(conn, repo.Self)
 
 		// Send repository name
+		fmt.Fprintf(conn, repo.Name)
 
 		// Compress My repository
+		repoTarPath := compressRepo(repo.Path)
 
 		// Get the size of the compressed repository
+		repoTar, err := os.Open(repoTarPath)
+		if err != nil {
+			fmt.Fprint(os.Stderr, "ERORR Opening repo tar", err.Error)
+			panic(err)
+		}
 
 		// Send the size of the repository
+		fileInfo, _ := repoTar.Stat()
+		fileSize := strconv.FormatInt(fileInfo.Size(), 10)
+
+		fmt.Fprintf(conn, fileSize)
 
 		// Send the compressed repository
+		sendBuffer := make([]byte, 1000)
+
+		for {
+			_, err = repoTar.Read(sendBuffer)
+			if err != io.EOF {
+				break
+			}
+			conn.Write(sendBuffer)
+		}
 
 		// Get the client's name
+		fmt.Fscanf(conn, "%s", node.Name)
 
 	case "connect":
 		// Send my name to peer
-		fmt.Fprintf(conn, myName)
+		fmt.Fprintf(conn, repo.Self)
 
 		// Get client's name
+		fmt.Fscanf(conn, "%s", node.Name)
 
 		// Search for the client's name
 

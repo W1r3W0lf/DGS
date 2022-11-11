@@ -153,7 +153,7 @@ func (repo *Repository) Run(commandChannel chan string) {
 		case "accept":
 			if len(command) == 2 {
 				fmt.Println("Starting Server")
-				repo.Peers = append(repo.Peers, newServerNode(command[1], repo.Self, &repo.AllPeers))
+				repo.Peers = append(repo.Peers, newServerNode(command[1], repo))
 			} else {
 				fmt.Println("Incorrect number of arguments")
 			}
