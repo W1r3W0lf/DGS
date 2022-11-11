@@ -38,16 +38,19 @@ func newServerNode(address string, repo *Repository) Node {
 	// Set the node's name
 	node.Address = address
 
+	fmt.Println("Listaning for connections")
 	listen, err := net.Listen("tcp", address)
 	if err != nil {
 		fmt.Fprint(os.Stderr, "ERORR listaning", err.Error)
 		panic(err)
 	}
+	fmt.Println("Waiting for a client")
 	conn, err := listen.Accept()
 	if err != nil {
 		fmt.Fprint(os.Stderr, "ERORR connecting to clinet", err.Error)
 		panic(err)
 	}
+	fmt.Println("Client Connected")
 	node.Reader = bufio.NewReader(conn)
 	node.Writer = bufio.NewWriter(conn)
 
@@ -102,6 +105,7 @@ func newServerNode(address string, repo *Repository) Node {
 		// Get client's name
 		fmt.Fscanf(conn, "%s", node.Name)
 
+		// maybe? I'm not shure about this yet
 		// Search for the client's name
 
 		// If not found throw an error

@@ -47,7 +47,7 @@ func main() {
 	var rawCommand string
 
 	var repo Repository
-	repo.initilised = false
+	repo.Initilised = false
 
 	for running {
 		//Take user input
@@ -64,21 +64,21 @@ func main() {
 
 		switch command[0] {
 		case "new":
-			if repo.initilised {
+			if repo.Initilised {
 				fmt.Println("Repo alredy initilised")
 			} else {
 				repo = newRepository(command[1])
 				go repo.Run(repoChan)
 			}
 		case "open":
-			if repo.initilised {
+			if repo.Initilised {
 				fmt.Println("Repo alredy initilised")
 			} else {
 				repo = openRepository(command[1])
 				go repo.Run(repoChan)
 			}
 		case "clone":
-			if repo.initilised {
+			if repo.Initilised {
 				fmt.Println("Repo alredy initilised")
 			} else {
 				repo = cloneRepository(command[1])
@@ -87,7 +87,7 @@ func main() {
 		case "help":
 			fmt.Println("new PATH\nopen NAME\nconnect name ip:port\naccept name ip:port")
 		default:
-			if repo.initilised {
+			if repo.Initilised {
 				repoChan <- rawCommand
 			} else {
 				fmt.Println("Unknown command\nRepo Not started")

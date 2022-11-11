@@ -72,7 +72,7 @@ func cloneRepository(address string) Repository {
 	// Make a TCP connection to the server
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error connecting", err.Error)
+		fmt.Fprintf(os.Stderr, "Error connecting ", err.Error)
 		panic(err)
 	}
 	reader := bufio.NewReader(conn)
@@ -142,48 +142,52 @@ func (repo *Repository) Run(commandChannel chan string) {
 	fmt.Println("Strting", repo.Name)
 
 	var cmd string
-	// Execute user commands
-	select {
-	case cmd = <-commandChannel:
-		command := strings.Split(cmd, " ")
 
-		switch command[0] {
-		case "pull":
-			pullRequest(repo, command[1])
-		case "accept":
-			if len(command) == 2 {
-				fmt.Println("Starting Server")
-				repo.Peers = append(repo.Peers, newServerNode(command[1], repo))
-			} else {
-				fmt.Println("Incorrect number of arguments")
+	for {
+
+		// Execute user commands
+		select {
+		case cmd = <-commandChannel:
+			command := strings.Split(cmd, " ")
+
+			switch command[0] {
+			case "pull":
+				pullRequest(repo, command[1])
+			case "accept":
+				if len(command) == 2 {
+					fmt.Println("Starting Server")
+					repo.Peers = append(repo.Peers, newServerNode(command[1], repo))
+				} else {
+					fmt.Println("Incorrect number of arguments")
+				}
+			case "connect":
+				if len(command) == 2 {
+					fmt.Println("Connecting to Server")
+					repo.Peers = append(repo.Peers, newClientNode(command[1]))
+				} else {
+					fmt.Println("Incorrect number of arguments")
+				}
+			default:
+				fmt.Println("Unknown command", cmd)
 			}
-		case "connect":
-			if len(command) == 2 {
-				fmt.Println("Connecting to Server")
-				repo.Peers = append(repo.Peers, newClientNode(command[1]))
-			} else {
-				fmt.Println("Incorrect number of arguments")
-			}
-		default:
-			fmt.Println("Unknown command", cmd)
-		}
 
-	// If there is nothing to do, don't block
-	default:
-	}
-
-	// Execute peer commands
-	for _, peer := range repo.Peers {
-		rawMessage, _ := peer.Reader.ReadString('\n')
-
-		message := strings.Split(rawMessage, "\n")
-
-		switch message[0] {
-		case "pull":
-			pullAccept(repo, peer)
+		// If there is nothing to do, don't block
 		default:
 		}
 
+		// Execute peer commands
+		for _, peer := range repo.Peers {
+			rawMessage, _ := peer.Reader.ReadString('\n')
+
+			message := strings.Split(rawMessage, "\n")
+
+			switch message[0] {
+			case "pull":
+				pullAccept(repo, peer)
+			default:
+			}
+
+		}
 	}
 
 }
