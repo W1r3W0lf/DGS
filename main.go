@@ -47,45 +47,51 @@ func main() {
 				fmt.Println("Repo alredy initilised")
 			} else {
 				repo = newRepository(command[1], user)
-				go repo.Run(repoChan)
+
 				user.Repos[repo.Name] = repo
-				fmt.Println(len(user.Repos))
 				writeConfig(user)
+
+				go repo.Run(repoChan)
 			}
 		case "open":
 			if repo.Initilised {
 				fmt.Println("Repo alredy initilised")
 			} else {
-				repo, err := openRepository(command[1], user)
-				if err != nil {
-					fmt.Fprintln(os.Stderr, "Error ", err.Error())
-				} else {
-					go repo.Run(repoChan)
-				}
+				repo = user.Repos[command[1]]
+				go repo.Run(repoChan)
 			}
 		case "clone":
 			if repo.Initilised {
 				fmt.Println("Repo alredy initilised")
 			} else {
-				repo = cloneRepository(command[1], user.Name, user.RepoPath)
+				repo = cloneRepository(command[1], user)
+
+				user.Repos[repo.Name] = repo
+				writeConfig(user)
+
 				go repo.Run(repoChan)
 			}
 		case "close":
-			repoChan <- "terminate"
-			// Save Repository to config
-			user.Repos[repo.Name] = repo
-
-			// Uninitilise repository
-			os.Exit(0)
+			if repo.Initilised {
+				fmt.Println("No Repository to close")
+			} else {
+				repoChan <- "terminate"
+				// Save Repository to config
+				user.Repos[repo.Name] = repo
+				// Uninitilise repository
+				writeConfig(user)
+			}
 
 		case "exit":
-			repoChan <- "terminate"
-			// Close Repository
-			user.Repos[repo.Name] = repo
+			if repo.Initilised {
+				repoChan <- "terminate"
+				// Close Repository
+				user.Repos[repo.Name] = repo
+			}
+			writeConfig(user)
 
 			// Exit Program
 			os.Exit(0)
-
 		case "terminate":
 			fmt.Println("Unknown command")
 		case "help":

@@ -70,7 +70,7 @@ func openRepository(name string, config UserConfig) (Repository, error) {
 	return repo, errors.New("No such repository")
 }
 
-func cloneRepository(address string, userName string, repoPath string) Repository {
+func cloneRepository(address string, config UserConfig) Repository {
 
 	var repo Repository
 	var node Node
@@ -80,7 +80,7 @@ func cloneRepository(address string, userName string, repoPath string) Repositor
 	// Make a TCP connection to the server
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error connecting ", err.Error())
+		fmt.Fprintln(os.Stderr, "Error connecting ", err.Error())
 		panic(err)
 	}
 	reader := bufio.NewReader(conn)
@@ -91,31 +91,31 @@ func cloneRepository(address string, userName string, repoPath string) Repositor
 	// Get the Repository name, and the server's peer name
 	node.Name, err = reader.ReadString('\n')
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error Getting Peer's name", err.Error())
+		fmt.Fprintln(os.Stderr, "Error Getting Peer's name", err.Error())
 		panic(err)
 	}
 
 	repo.Name, err = reader.ReadString('\n')
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error Getting Repository's name", err.Error())
+		fmt.Fprintln(os.Stderr, "Error Getting Repository's name", err.Error())
 		panic(err)
 	}
 
 	// Get the number of bytes that need to be accepted
 	repoSizeString, err := reader.ReadString('\n')
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error Getting Peer's name", err.Error())
+		fmt.Fprintln(os.Stderr, "Error Getting Peer's name", err.Error())
 		panic(err)
 	}
 	repoSize, _ := strconv.Atoi(repoSizeString)
 	buffer := make([]byte, repoSize)
 
-	// Download the repository to ./repos/NAME-vs/NAME
-	repo.RepoStore = "./repos/" + repo.Name
+	// Download the repository to ./repos/NAME-vs/USER.tar.gz
+	repo.RepoStore = config.RepoPath + repo.Name + "-vs/"
 
 	n, err := io.ReadFull(reader, buffer)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error Downloading Repository", err.Error())
+		fmt.Fprintln(os.Stderr, "Error Downloading Repository", err.Error())
 		panic(err)
 	}
 
@@ -123,17 +123,8 @@ func cloneRepository(address string, userName string, repoPath string) Repositor
 		fmt.Println("Didn't recive enough bytes")
 	}
 
-	/*
-		// Write Repository to disk
-		f, err := os.Create(repo.name + "tar.gz")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error Writting Repository", err.Error)
-			panic(err)
-		}
-		defer f.Close()
-	*/
-
-	ioutil.WriteFile(repo.Name+"tar.gz", buffer, 0644)
+	// TODO This dosen't match the Server
+	ioutil.WriteFile(repo.RepoStore+node.Name+".tar.gz", buffer, 0644)
 
 	// Extract compressed Repository
 

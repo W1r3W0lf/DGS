@@ -84,10 +84,11 @@ func newServerNode(address string, repo *Repository) Node {
 		// Get the size of the compressed repository
 		repoTar, err := os.Open(repoTarPath)
 		if err != nil {
-			fmt.Fprint(os.Stderr, "ERORR Opening repo tar", err.Error)
+			fmt.Fprintln(os.Stderr, "ERORR Opening repo tar", err.Error())
 			panic(err)
 		}
 
+		fmt.Println("Sending File Size")
 		// Send the size of the repository
 		fileInfo, err := repoTar.Stat()
 		if err != nil {
@@ -98,9 +99,11 @@ func newServerNode(address string, repo *Repository) Node {
 
 		fmt.Fprintf(conn, fileSize)
 
+		// TODO This dosen't match the Client
 		// Send the compressed repository
 		sendBuffer := make([]byte, 1000)
 
+		fmt.Println("Sending File")
 		for {
 			_, err = repoTar.Read(sendBuffer)
 			if err != io.EOF {
@@ -108,6 +111,7 @@ func newServerNode(address string, repo *Repository) Node {
 			}
 			conn.Write(sendBuffer)
 		}
+		fmt.Println("Finished Sending File")
 
 		// Get the client's name
 		fmt.Fscanf(conn, "%s", node.Name)
