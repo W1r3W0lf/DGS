@@ -41,13 +41,13 @@ func newServerNode(address string, repo *Repository) Node {
 
 	listen, err := net.Listen("tcp", address)
 	if err != nil {
-		fmt.Fprint(os.Stderr, "ERORR listaning", err.Error)
+		fmt.Fprint(os.Stderr, "ERORR listaning", err.Error())
 		panic(err)
 	}
 	fmt.Println("Waiting for a client")
 	conn, err := listen.Accept()
 	if err != nil {
-		fmt.Fprint(os.Stderr, "ERORR connecting to clinet", err.Error)
+		fmt.Fprint(os.Stderr, "ERORR connecting to clinet", err.Error())
 		panic(err)
 	}
 	fmt.Println("Client Connected")
@@ -56,7 +56,7 @@ func newServerNode(address string, repo *Repository) Node {
 
 	mode, err := node.Reader.ReadString('\n')
 	if err != nil {
-		fmt.Fprint(os.Stderr, "ERORR getting data from clinet", err.Error)
+		fmt.Fprint(os.Stderr, "ERORR getting data from clinet", err.Error())
 		panic(err)
 	}
 
@@ -75,11 +75,13 @@ func newServerNode(address string, repo *Repository) Node {
 
 		fmt.Println("Compressing file")
 		// Compress My repository
-		repoTarPath, err := compressRepo(repo.RepoStore + repo.Name)
+		err = compressRepo(repo.RepoStore+repo.Name, repo.RepoStore)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "Error compressing tar file", err.Error())
 			panic(err)
 		}
+
+		repoTarPath := repo.RepoStore + repo.Name + ".tar.gz"
 
 		// Get the size of the compressed repository
 		repoTar, err := os.Open(repoTarPath)

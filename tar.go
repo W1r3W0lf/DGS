@@ -10,24 +10,35 @@ import (
 	"strings"
 )
 
-func compressRepo(repoPath string) error {
-	err := Tar(repoPath, repoPath)
+func compressRepo(repoPath string, target string) error {
+
+	// Use absolute paths as to not incude the relotive directories
+	repoPath, err := filepath.Abs(repoPath)
 	if err != nil {
 		return err
 	}
-	err = Gzip(repoPath+".tar", repoPath+".tar")
+	target, err = filepath.Abs(target)
+	if err != nil {
+		return err
+	}
+
+	err = Tar(repoPath, target)
+	if err != nil {
+		return err
+	}
+	err = Gzip(repoPath+".tar", target)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func uncompressRepo(repoPath string) error {
-	err := UnGzip(repoPath+".tar.gz", repoPath+".tar.gz")
+func uncompressRepo(repoPath string, target string) error {
+	err := UnGzip(repoPath+".tar.gz", target)
 	if err != nil {
 		return err
 	}
-	err = Untar(repoPath+".tar", repoPath+".tar")
+	err = Untar(repoPath+".tar", target)
 	if err != nil {
 		return err
 	}
