@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -19,36 +20,36 @@ type Repository struct {
 	ActiveVersion string   //The name of the user who's repository is being used
 	LinkPath      string   // The path to where the User is linked to
 	RepoStore     string   // The location where all of the diffrent versions are stored
-	Initilised    bool     // Has the repository been set up yet
 	Self          string   // The name of this node
 	Peers         []Node   // All connected Peers
 	AllPeers      []string // All connected and disconnected Peers
+	Initilised    bool     // Has the repository been set up yet
 }
 
-func newRepository(path string, userName string, repoPath string) Repository {
+func newRepository(path string, config UserConfig) Repository {
 
 	var repo Repository
 
-	repo.Self = userName
-	repo.ActiveVersion = userName
-
 	repo.Name = filepath.Base(path)
+	repo.ActiveVersion = config.Name
+	repo.LinkPath = config.RepoPath + filepath.Base(path)
+	repo.RepoStore = config.RepoPath + filepath.Base(path) + "-vs/"
+	repo.Peers = make([]Node, 0)
+	repo.AllPeers = make([]string, 0)
 
-	repo.RepoStore = "./repos/" + filepath.Base(path) + "-vs/"
-
-	repo.LinkPath = "./repos/" + filepath.Base(path)
+	repo.Self = config.Name
 
 	git.PlainClone(repo.RepoStore+repo.Name, true, &git.CloneOptions{URL: path})
 
 	abs, err := filepath.Abs(repo.RepoStore + repo.Name)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error abs path", err.Error)
+		fmt.Fprintln(os.Stderr, "Error abs path", err.Error())
 		panic(err)
 	}
 
 	err = os.Symlink(abs, repo.LinkPath)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error makeing symlink to repo", err.Error)
+		fmt.Fprintln(os.Stderr, "Error makeing symlink to repo", err.Error())
 		panic(err)
 	}
 
@@ -57,23 +58,16 @@ func newRepository(path string, userName string, repoPath string) Repository {
 	return repo
 }
 
-func openRepository(path string, userName string, repoPath string) Repository {
-
-	// Get Repo info from repo file
-
+func openRepository(name string, config UserConfig) (Repository, error) {
 	var repo Repository
 
-	repo.Name = filepath.Base(path)
+	for _, rp := range config.Repos {
+		if rp.Name == name {
+			return rp, nil
+		}
+	}
 
-	repo.Self = userName
-
-	repo.LinkPath = "./repos/" + filepath.Base(path)
-
-	repo.RepoStore = "./repos/" + filepath.Base(path) + "-vs/"
-
-	repo.Initilised = true
-
-	return repo
+	return repo, errors.New("No such repository")
 }
 
 func cloneRepository(address string, userName string, repoPath string) Repository {
@@ -86,7 +80,7 @@ func cloneRepository(address string, userName string, repoPath string) Repositor
 	// Make a TCP connection to the server
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error connecting ", err.Error)
+		fmt.Fprintf(os.Stderr, "Error connecting ", err.Error())
 		panic(err)
 	}
 	reader := bufio.NewReader(conn)
@@ -97,20 +91,20 @@ func cloneRepository(address string, userName string, repoPath string) Repositor
 	// Get the Repository name, and the server's peer name
 	node.Name, err = reader.ReadString('\n')
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error Getting Peer's name", err.Error)
+		fmt.Fprintf(os.Stderr, "Error Getting Peer's name", err.Error())
 		panic(err)
 	}
 
 	repo.Name, err = reader.ReadString('\n')
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error Getting Repository's name", err.Error)
+		fmt.Fprintf(os.Stderr, "Error Getting Repository's name", err.Error())
 		panic(err)
 	}
 
 	// Get the number of bytes that need to be accepted
 	repoSizeString, err := reader.ReadString('\n')
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error Getting Peer's name", err.Error)
+		fmt.Fprintf(os.Stderr, "Error Getting Peer's name", err.Error())
 		panic(err)
 	}
 	repoSize, _ := strconv.Atoi(repoSizeString)
@@ -121,7 +115,7 @@ func cloneRepository(address string, userName string, repoPath string) Repositor
 
 	n, err := io.ReadFull(reader, buffer)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error Downloading Repository", err.Error)
+		fmt.Fprintf(os.Stderr, "Error Downloading Repository", err.Error())
 		panic(err)
 	}
 

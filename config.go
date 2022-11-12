@@ -11,9 +11,9 @@ import (
 )
 
 type UserConfig struct {
-	Name     string       // User Name
-	RepoPath string       //
-	Repos    []Repository //
+	Name     string                // User Name
+	RepoPath string                //
+	Repos    map[string]Repository //
 }
 
 func startUser(reader *bufio.Reader) UserConfig {
@@ -45,7 +45,7 @@ func setupConfig(reader *bufio.Reader) UserConfig {
 		panic(err)
 	}
 
-	config.Repos = make([]Repository, 0)
+	config.Repos = make(map[string]Repository, 0)
 
 	configFile, err := os.Create("./dgs.toml")
 	if err != nil {

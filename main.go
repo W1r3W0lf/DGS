@@ -46,9 +46,9 @@ func main() {
 			if repo.Initilised {
 				fmt.Println("Repo alredy initilised")
 			} else {
-				repo = newRepository(command[1], user.Name, user.RepoPath)
+				repo = newRepository(command[1], user)
 				go repo.Run(repoChan)
-				user.Repos = append(user.Repos, repo)
+				user.Repos[repo.Name] = repo
 				fmt.Println(len(user.Repos))
 				writeConfig(user)
 			}
@@ -56,8 +56,12 @@ func main() {
 			if repo.Initilised {
 				fmt.Println("Repo alredy initilised")
 			} else {
-				repo = openRepository(command[1], user.Name, user.RepoPath)
-				go repo.Run(repoChan)
+				repo, err := openRepository(command[1], user)
+				if err != nil {
+					fmt.Fprintln(os.Stderr, "Error ", err.Error())
+				} else {
+					go repo.Run(repoChan)
+				}
 			}
 		case "clone":
 			if repo.Initilised {
@@ -69,14 +73,18 @@ func main() {
 		case "close":
 			repoChan <- "terminate"
 			// Save Repository to config
+			user.Repos[repo.Name] = repo
 
 			// Uninitilise repository
+			os.Exit(0)
 
 		case "exit":
 			repoChan <- "terminate"
 			// Close Repository
+			user.Repos[repo.Name] = repo
 
 			// Exit Program
+			os.Exit(0)
 
 		case "terminate":
 			fmt.Println("Unknown command")
