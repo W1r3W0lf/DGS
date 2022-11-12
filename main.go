@@ -48,6 +48,9 @@ func main() {
 			} else {
 				repo = newRepository(command[1], user.Name, user.RepoPath)
 				go repo.Run(repoChan)
+				user.Repos = append(user.Repos, repo)
+				fmt.Println(len(user.Repos))
+				writeConfig(user)
 			}
 		case "open":
 			if repo.Initilised {
@@ -63,6 +66,20 @@ func main() {
 				repo = cloneRepository(command[1], user.Name, user.RepoPath)
 				go repo.Run(repoChan)
 			}
+		case "close":
+			repoChan <- "terminate"
+			// Save Repository to config
+
+			// Uninitilise repository
+
+		case "exit":
+			repoChan <- "terminate"
+			// Close Repository
+
+			// Exit Program
+
+		case "terminate":
+			fmt.Println("Unknown command")
 		case "help":
 			fmt.Println("new PATH\nopen NAME\nconnect ip:port\naccept :port")
 		default:

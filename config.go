@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"strings"
 
@@ -38,7 +39,7 @@ func setupConfig(reader *bufio.Reader) UserConfig {
 	config.Name = name
 
 	config.RepoPath = "./repos/"
-	err = os.Mkdir(config.RepoPath, 755)
+	err = os.Mkdir(config.RepoPath, os.FileMode(0777))
 	if err != nil {
 		fmt.Fprint(os.Stderr, "Error creating repo directory", err.Error())
 		panic(err)
@@ -52,13 +53,13 @@ func setupConfig(reader *bufio.Reader) UserConfig {
 		panic(err)
 	}
 
-	b, err := toml.Marshal(config)
+	m, err := toml.Marshal(config)
 	if err != nil {
 		fmt.Fprint(os.Stderr, "Error Marshaling config", err.Error())
 		panic(err)
 	}
 
-	configFile.Write(b)
+	configFile.Write(m)
 
 	return config
 }
@@ -96,5 +97,30 @@ func loadConfig() UserConfig {
 }
 
 func writeConfig(config UserConfig) {
+
+	/*
+		configFile, err := os.Open("./dgs.toml")
+		if err != nil {
+			fmt.Fprint(os.Stderr, "Error opening repo config", err.Error())
+			panic(err)
+		}
+		defer configFile.Close()
+	*/
+
+	m, err := toml.Marshal(config)
+	if err != nil {
+		fmt.Fprint(os.Stderr, "Error Marshaling config", err.Error())
+		panic(err)
+	}
+
+	ioutil.WriteFile("./dgs.toml", m, 0644)
+
+	/*
+		_, err = configFile.Write(m)
+		if err != nil {
+			fmt.Fprint(os.Stderr, "Error Writting config", err.Error())
+			panic(err)
+		}
+	*/
 
 }

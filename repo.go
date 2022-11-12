@@ -181,13 +181,10 @@ func (repo *Repository) Run(commandChannel chan string) {
 				} else {
 					fmt.Println("Incorrect number of arguments")
 				}
-			case "close":
-				// Write Data to disk
-
-				// Exit
+			case "terminate":
 
 			default:
-				fmt.Println("Unknown command", cmd)
+				fmt.Println("Unknown command")
 			}
 
 		// If there is nothing to do, don't block
