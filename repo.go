@@ -15,19 +15,22 @@ import (
 )
 
 type Repository struct {
-	Name       string // The name of the repository
-	LinkPath   string // The path to where the User is linked to
-	ActiveRepo string // The path to where the active repository is
-	RepoStore  string // The location where all of the diffrent versions are stored
-	Initilised bool   // Has the repository been set up yet
-	Self       string // The name of this node
-	Peers      []Node // All connected Peers
-	AllPeers   []Node // All connected and disconnected Peers
+	Name          string   // The name of the repository
+	ActiveVersion string   //The name of the user who's repository is being used
+	LinkPath      string   // The path to where the User is linked to
+	RepoStore     string   // The location where all of the diffrent versions are stored
+	Initilised    bool     // Has the repository been set up yet
+	Self          string   // The name of this node
+	Peers         []Node   // All connected Peers
+	AllPeers      []string // All connected and disconnected Peers
 }
 
-func newRepository(path string) Repository {
+func newRepository(path string, userName string, repoPath string) Repository {
 
 	var repo Repository
+
+	repo.Self = userName
+	repo.ActiveVersion = userName
 
 	repo.Name = filepath.Base(path)
 
@@ -54,11 +57,15 @@ func newRepository(path string) Repository {
 	return repo
 }
 
-func openRepository(path string) Repository {
+func openRepository(path string, userName string, repoPath string) Repository {
+
+	// Get Repo info from repo file
 
 	var repo Repository
 
 	repo.Name = filepath.Base(path)
+
+	repo.Self = userName
 
 	repo.LinkPath = "./repos/" + filepath.Base(path)
 
@@ -69,7 +76,7 @@ func openRepository(path string) Repository {
 	return repo
 }
 
-func cloneRepository(address string) Repository {
+func cloneRepository(address string, userName string, repoPath string) Repository {
 
 	var repo Repository
 	var node Node
@@ -174,6 +181,11 @@ func (repo *Repository) Run(commandChannel chan string) {
 				} else {
 					fmt.Println("Incorrect number of arguments")
 				}
+			case "close":
+				// Write Data to disk
+
+				// Exit
+
 			default:
 				fmt.Println("Unknown command", cmd)
 			}

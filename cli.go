@@ -1,21 +1,24 @@
 package main
 
-import "fmt"
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"strings"
+)
 
-func cli() {
+func getCommand(reader *bufio.Reader) ([]string, string) {
 
-	var command string
-	for {
-		fmt.Println("Hello")
-
-		fmt.Print("=")
-		fmt.Scanln(&command)
-
-		switch command {
-		case "info":
-			fmt.Println("Peer Info")
-		default:
-			fmt.Printf("Unknown command %s\n", command)
-		}
+	rawCommand, err := reader.ReadString('\n')
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error Reading command ", err.Error())
+		panic(err)
 	}
+
+	rawCommand = strings.TrimSuffix(rawCommand, "\n")
+
+	// Parse command
+	command := strings.Split(rawCommand, " ")
+
+	return command, rawCommand
 }

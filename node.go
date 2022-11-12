@@ -75,7 +75,7 @@ func newServerNode(address string, repo *Repository) Node {
 
 		fmt.Println("Compressing file")
 		// Compress My repository
-		repoTarPath, err := compressRepo(repo.ActiveRepo)
+		repoTarPath, err := compressRepo(repo.RepoStore + repo.Name)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "Error compressing tar file", err.Error())
 			panic(err)
@@ -89,7 +89,11 @@ func newServerNode(address string, repo *Repository) Node {
 		}
 
 		// Send the size of the repository
-		fileInfo, _ := repoTar.Stat()
+		fileInfo, err := repoTar.Stat()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Error getting tarfile size", err.Error())
+			panic(err)
+		}
 		fileSize := strconv.FormatInt(fileInfo.Size(), 10)
 
 		fmt.Fprintf(conn, fileSize)

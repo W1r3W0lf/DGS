@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/ipfs/go-log"
 	"github.com/libp2p/go-libp2p-core/network"
@@ -27,65 +26,45 @@ func handleStream(stream network.Stream) {
 
 func main() {
 
-	/*
-		log.SetDebugLogging()
-
-		f, err := os.Create("profile")
-		if err != nil {
-			panic(err)
-		}
-		pprof.StartCPUProfile(f)
-		defer pprof.StopCPUProfile()
-	*/
-
-	//	git.PlainClone("/tmp/DGSgit", true, &git.CloneOptions{
-	//		URL: "/tmp/test-git"})
+	inputReader := bufio.NewReader(os.Stdin)
+	user := startUser(inputReader)
+	fmt.Println("Welcome back", user.Name)
 
 	repoChan := make(chan string)
-
-	running := true
-	var rawCommand string
 
 	var repo Repository
 	repo.Initilised = false
 
-	for running {
+	for {
 		//Take user input
 		fmt.Print(">")
-		//fmt.Scanln(&rawCommand)
-		inputReader := bufio.NewReader(os.Stdin)
-		rawCommand, _ = inputReader.ReadString('\n')
-		fmt.Println(rawCommand)
-		rawCommand = strings.TrimSuffix(rawCommand, "\n")
 
-		// Parse command
-		command := strings.Split(rawCommand, " ")
-		fmt.Println(command)
+		command, rawCommand := getCommand(inputReader)
 
 		switch command[0] {
 		case "new":
 			if repo.Initilised {
 				fmt.Println("Repo alredy initilised")
 			} else {
-				repo = newRepository(command[1])
+				repo = newRepository(command[1], user.Name, user.RepoPath)
 				go repo.Run(repoChan)
 			}
 		case "open":
 			if repo.Initilised {
 				fmt.Println("Repo alredy initilised")
 			} else {
-				repo = openRepository(command[1])
+				repo = openRepository(command[1], user.Name, user.RepoPath)
 				go repo.Run(repoChan)
 			}
 		case "clone":
 			if repo.Initilised {
 				fmt.Println("Repo alredy initilised")
 			} else {
-				repo = cloneRepository(command[1])
+				repo = cloneRepository(command[1], user.Name, user.RepoPath)
 				go repo.Run(repoChan)
 			}
 		case "help":
-			fmt.Println("new PATH\nopen NAME\nconnect name ip:port\naccept name ip:port")
+			fmt.Println("new PATH\nopen NAME\nconnect ip:port\naccept :port")
 		default:
 			if repo.Initilised {
 				repoChan <- rawCommand
@@ -93,10 +72,10 @@ func main() {
 				fmt.Println("Unknown command\nRepo Not started")
 			}
 		}
-
 	}
+}
 
-	return
+func p2pStart() {
 
 	log.SetAllLoggers(log.LevelWarn)
 	//log.SetLogLevel("DGS", "info")
@@ -118,5 +97,4 @@ func main() {
 	host := newP2PNode(config)
 
 	connectToNetwork(host, config)
-
 }
