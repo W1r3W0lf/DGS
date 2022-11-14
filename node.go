@@ -50,18 +50,19 @@ func newServerNode(address string, repo *Repository) Node {
 
 	var mode string
 	// Get command from client
-	fmt.Fscanf(conn, "%s", mode)
+	_, err = fmt.Fscanf(conn, "%s", &mode)
+	handleError(err, "Error getting command from client")
 
 	switch mode {
 	case "clone":
 		fmt.Println("Sending name")
 		// Send my name to peer
-		_, err = fmt.Fprintf(conn, repo.Self)
+		_, err = fmt.Fprintf(conn, repo.Self+" ")
 		handleError(err, "Error sending name to client")
 
 		fmt.Println("Sending repo name")
 		// Send repository name
-		_, err = fmt.Fprintf(conn, repo.Name)
+		_, err = fmt.Fprintf(conn, repo.Name+" ")
 		handleError(err, "Error sending repository name to client")
 
 		fmt.Println("Compressing file")
@@ -83,7 +84,7 @@ func newServerNode(address string, repo *Repository) Node {
 
 		fileSize := strconv.FormatInt(fileInfo.Size(), 10)
 
-		_, err = fmt.Fprintf(conn, fileSize)
+		_, err = fmt.Fprintf(conn, fileSize+" ")
 		handleError(err, "Error sending file size")
 		fmt.Println(fileSize)
 
@@ -99,7 +100,7 @@ func newServerNode(address string, repo *Repository) Node {
 		fmt.Println("Finished Sending File")
 
 		// Get the client's name
-		_, err = fmt.Fscanf(conn, "%s", node.Name)
+		_, err = fmt.Fscanf(conn, "%s", &node.Name)
 		handleError(err, "Error getting client's name")
 
 		// Add client to knwon peers

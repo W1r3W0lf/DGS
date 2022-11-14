@@ -25,6 +25,10 @@ type Repository struct {
 	Initilised    bool     // Has the repository been set up yet
 }
 
+func setRepoSymLink(repo Repository, peer string) {
+
+}
+
 func newRepository(path string, config UserConfig) Repository {
 
 	var repo Repository
@@ -77,23 +81,23 @@ func cloneRepository(address string, config UserConfig) Repository {
 
 	fmt.Println("Sending Clone command")
 	// Send the clone command
-	_, err = fmt.Fprintf(conn, "clone\n")
+	_, err = fmt.Fprintf(conn, "clone ")
 	handleError(err, "Failed to send clone command")
 
 	fmt.Println("Getting Server's name")
 	// Get the Repository name, and the server's peer name
-	_, err = fmt.Fscanf(conn, "%s", node.Name)
+	_, err = fmt.Fscanf(conn, "%s", &node.Name)
 	handleError(err, "Failed to get server's name")
 
 	fmt.Println("Getting Repo's name")
 
-	_, err = fmt.Fscanf(conn, "%s", repo.Name)
+	_, err = fmt.Fscanf(conn, "%s", &repo.Name)
 	handleError(err, "Failed to get repo's name")
 
 	fmt.Println("Getting Repo's size")
 	// Get the number of bytes that need to be accepted
 	var repoSizeString string
-	_, err = fmt.Fscanf(conn, "%s", repoSizeString)
+	_, err = fmt.Fscanf(conn, "%s", &repoSizeString)
 	handleError(err, "Failed to get repo's size")
 
 	repoSize, _ := strconv.Atoi(repoSizeString)
@@ -128,7 +132,7 @@ func cloneRepository(address string, config UserConfig) Repository {
 	handleError(err, "Error Extracting Repository")
 
 	// Send my name to the server
-	fmt.Fprintf(conn, config.Name)
+	fmt.Fprintf(conn, config.Name+" ")
 
 	// Add server to known peers
 	repo.AllPeers = append(repo.AllPeers, node.Name)
