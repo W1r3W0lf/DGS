@@ -4,11 +4,9 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/libp2p/go-libp2p"
@@ -40,83 +38,72 @@ func newServerNode(address string, repo *Repository) Node {
 	node.Address = address
 
 	listen, err := net.Listen("tcp", address)
-	if err != nil {
-		fmt.Fprint(os.Stderr, "ERORR listaning", err.Error())
-		panic(err)
-	}
+	handleError(err, "Error listaning")
+
 	fmt.Println("Waiting for a client")
 	conn, err := listen.Accept()
-	if err != nil {
-		fmt.Fprint(os.Stderr, "ERORR connecting to clinet", err.Error())
-		panic(err)
-	}
+	handleError(err, "Error connecting to client")
+
 	fmt.Println("Client Connected")
 	node.Reader = bufio.NewReader(conn)
 	node.Writer = bufio.NewWriter(conn)
 
-	mode, err := node.Reader.ReadString('\n')
-	if err != nil {
-		fmt.Fprint(os.Stderr, "ERORR getting data from clinet", err.Error())
-		panic(err)
-	}
-
-	mode = strings.TrimSuffix(mode, "\n")
-	fmt.Println(mode)
+	var mode string
+	// Get command from client
+	fmt.Fscanf(conn, "%s", mode)
 
 	switch mode {
 	case "clone":
 		fmt.Println("Sending name")
 		// Send my name to peer
-		fmt.Fprintf(conn, repo.Self)
+		_, err = fmt.Fprintf(conn, repo.Self)
+		handleError(err, "Error sending name to client")
 
 		fmt.Println("Sending repo name")
 		// Send repository name
-		fmt.Fprintf(conn, repo.Name)
+		_, err = fmt.Fprintf(conn, repo.Name)
+		handleError(err, "Error sending repository name to client")
 
 		fmt.Println("Compressing file")
 		// Compress My repository
-		err = compressRepo(repo.RepoStore+repo.Name, repo.RepoStore)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error compressing tar file", err.Error())
-			panic(err)
-		}
+		err = compressRepo(repo.RepoStore+repo.Self, repo.RepoStore)
+		handleError(err, "Error compressing repo")
 
-		repoTarPath := repo.RepoStore + repo.Name + ".tar.gz"
+		repoTarPath := repo.RepoStore + repo.Self + ".tar.gz"
 
 		// Get the size of the compressed repository
 		repoTar, err := os.Open(repoTarPath)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "ERORR Opening repo tar", err.Error())
-			panic(err)
-		}
+		handleError(err, "Error opening repo tar file")
+		defer repoTar.Close()
 
 		fmt.Println("Sending File Size")
 		// Send the size of the repository
 		fileInfo, err := repoTar.Stat()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error getting tarfile size", err.Error())
-			panic(err)
-		}
+		handleError(err, "Error getting tarfile size")
+
 		fileSize := strconv.FormatInt(fileInfo.Size(), 10)
 
-		fmt.Fprintf(conn, fileSize)
+		_, err = fmt.Fprintf(conn, fileSize)
+		handleError(err, "Error sending file size")
+		fmt.Println(fileSize)
 
-		// TODO This dosen't match the Client
 		// Send the compressed repository
-		sendBuffer := make([]byte, 1000)
-
 		fmt.Println("Sending File")
-		for {
-			_, err = repoTar.Read(sendBuffer)
-			if err != io.EOF {
-				break
-			}
-			conn.Write(sendBuffer)
-		}
+
+		sendBuffer := make([]byte, fileInfo.Size())
+		_, err = repoTar.Read(sendBuffer)
+		handleError(err, "Error reading repo into buffer")
+
+		_, err = conn.Write(sendBuffer)
+		handleError(err, "Error sending data to client")
 		fmt.Println("Finished Sending File")
 
 		// Get the client's name
-		fmt.Fscanf(conn, "%s", node.Name)
+		_, err = fmt.Fscanf(conn, "%s", node.Name)
+		handleError(err, "Error getting client's name")
+
+		// Add client to knwon peers
+		repo.AllPeers = append(repo.AllPeers, node.Name)
 
 	case "connect":
 		// Send my name to peer
@@ -134,28 +121,29 @@ func newServerNode(address string, repo *Repository) Node {
 	return node
 }
 
-func newClientNode(address string) Node {
+func newClientNode(address string, repo *Repository) Node {
 	var node Node
-	// Set the node's name
+
 	node.Address = address
 
 	conn, err := net.Dial("tcp", address)
-	if err != nil {
-		fmt.Fprint(os.Stderr, "ERORR listaning", err.Error)
-		panic(err)
-	}
+	handleError(err, "Error listaning")
+
 	node.Reader = bufio.NewReader(conn)
 	node.Writer = bufio.NewWriter(conn)
 
-	fmt.Fprintf(conn, "connect")
+	// Ask to node's name
+
+	_, err = fmt.Fprintf(conn, "connect")
+	handleError(err, "Error sending connection command to server")
 
 	// Get the server's name
+	_, err = fmt.Fscanf(node.Reader, "%s", node.Name)
+	handleError(err, "Error getting server's name")
 
 	// Send my name
-	var name string
-	fmt.Println("What's your name?")
-	fmt.Fscanln(os.Stdin, name)
-	fmt.Fprintf(conn, name)
+	_, err = fmt.Fprintf(conn, repo.Self)
+	handleError(err, "Error sending name")
 
 	return node
 }
@@ -180,9 +168,7 @@ func newLimiter() network.ResourceManagerState {
 
 	// Initialize the resource manager
 	rm, err := rcmgr.NewResourceManager(limiter)
-	if err != nil {
-		panic(err)
-	}
+	handleError(err, "Error initalizing resource manager")
 
 	return rm
 }
@@ -267,9 +253,7 @@ func connectToNetwork(host host.Host, config Config) {
 	// This is like your friend telling you the location to meet you.
 	logger.Debug("Searching for other peers...")
 	peerChan, err := routingDiscovery.FindPeers(ctx, config.RendezvousString)
-	if err != nil {
-		panic(err)
-	}
+	handleError(err, "Error finding peers")
 
 	//peerList := make([]*bufio.ReadWriter, 0, 0)
 
@@ -311,10 +295,7 @@ func connectToPeers(host host.Host, ctx context.Context, peerChan <-chan peer.Ad
 func readData(rw *bufio.ReadWriter) {
 	for {
 		str, err := rw.ReadString('\n')
-		if err != nil {
-			fmt.Println("Error reading from buffer")
-			panic(err)
-		}
+		handleError(err, "Error reading from buffer")
 
 		if str == "" {
 			return
@@ -334,20 +315,12 @@ func writeData(rw *bufio.ReadWriter) {
 	for {
 		fmt.Print("> ")
 		sendData, err := stdReader.ReadString('\n')
-		if err != nil {
-			fmt.Println("Error reading from stdin")
-			panic(err)
-		}
+		handleError(err, "Error reading from stdin")
 
 		_, err = rw.WriteString(fmt.Sprintf("%s\n", sendData))
-		if err != nil {
-			fmt.Println("Error writing to buffer")
-			panic(err)
-		}
+		handleError(err, "Error writting buffer")
+
 		err = rw.Flush()
-		if err != nil {
-			fmt.Println("Error flushing buffer")
-			panic(err)
-		}
+		handleError(err, "Error flushing buffer")
 	}
 }

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/libp2p/go-libp2p-core/crypto"
@@ -15,58 +14,34 @@ func loadKeys() (crypto.PrivKey, crypto.PubKey) {
 	if _, err := os.Stat("prvKey"); err == nil {
 
 		keyBuff, err := os.ReadFile("prvKey")
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error reading Private Key")
-			panic(err)
-		}
+		handleError(err, "Error reading Private Key")
+
 		prvKey, err = crypto.UnmarshalPrivateKey(keyBuff)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error Unmarshaling Private Key")
-			panic(err)
-		}
+		handleError(err, "Error Unmarshaling Private Key")
 
 		keyBuff, err = os.ReadFile("pubKey")
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error reading Public Key")
-			panic(err)
-		}
+		handleError(err, "Error reading Public Key")
 
 		pubKey, err = crypto.UnmarshalPublicKey(keyBuff)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error Unmarshaling Public Key")
-			panic(err)
-		}
+		handleError(err, "Error Unmarshaling Public Key")
 
 	} else {
 		// Make a new key if a key pair isn't avalable
 		prvKey, pubKey, err = crypto.GenerateKeyPair(crypto.RSA, 2048)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error Generating RSA key pair")
-			panic(err)
-		}
+		handleError(err, "Error Generating RSA key pair")
 
 		// Creates a new RSA key pair for this host.
 		keyBuff, err := crypto.MarshalPrivateKey(prvKey)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error Marshaling Private Key")
-			panic(err)
-		}
+		handleError(err, "Error Marshaling Private Key")
 
 		err = os.WriteFile("prvKey", keyBuff, 0644)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error Writeing to prvKey")
-		}
+		handleError(err, "Error Writeing Private Key")
 
 		keyBuff, err = crypto.MarshalPublicKey(pubKey)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error Marshaling Public Key")
-			panic(err)
-		}
+		handleError(err, "Error Marshaling Public Key")
 
 		err = os.WriteFile("pubKey", keyBuff, 0644)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error Writeing to pubKey")
-		}
+		handleError(err, "Error Writeing Public Key")
 
 	}
 

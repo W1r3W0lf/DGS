@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
@@ -39,19 +38,13 @@ func newRepository(path string, config UserConfig) Repository {
 
 	repo.Self = config.Name
 
-	git.PlainClone(repo.RepoStore+repo.Name, true, &git.CloneOptions{URL: path})
+	git.PlainClone(repo.RepoStore+config.Name, true, &git.CloneOptions{URL: path})
 
 	abs, err := filepath.Abs(repo.RepoStore + repo.Name)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error abs path", err.Error())
-		panic(err)
-	}
+	handleError(err, "Error getting an absolute path")
 
 	err = os.Symlink(abs, repo.LinkPath)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error makeing symlink to repo", err.Error())
-		panic(err)
-	}
+	handleError(err, "Error making symlink to repo")
 
 	repo.Initilised = true
 
@@ -79,58 +72,66 @@ func cloneRepository(address string, config UserConfig) Repository {
 
 	// Make a TCP connection to the server
 	conn, err := net.Dial("tcp", address)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error connecting ", err.Error())
-		panic(err)
-	}
+	handleError(err, "Failed to connect")
 	reader := bufio.NewReader(conn)
 
+	fmt.Println("Sending Clone command")
 	// Send the clone command
-	fmt.Fprintf(conn, "clone\n")
+	_, err = fmt.Fprintf(conn, "clone\n")
+	handleError(err, "Failed to send clone command")
 
+	fmt.Println("Getting Server's name")
 	// Get the Repository name, and the server's peer name
-	node.Name, err = reader.ReadString('\n')
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error Getting Peer's name", err.Error())
-		panic(err)
-	}
+	_, err = fmt.Fscanf(conn, "%s", node.Name)
+	handleError(err, "Failed to get server's name")
 
-	repo.Name, err = reader.ReadString('\n')
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error Getting Repository's name", err.Error())
-		panic(err)
-	}
+	fmt.Println("Getting Repo's name")
 
+	_, err = fmt.Fscanf(conn, "%s", repo.Name)
+	handleError(err, "Failed to get repo's name")
+
+	fmt.Println("Getting Repo's size")
 	// Get the number of bytes that need to be accepted
-	repoSizeString, err := reader.ReadString('\n')
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error Getting Peer's name", err.Error())
-		panic(err)
-	}
+	var repoSizeString string
+	_, err = fmt.Fscanf(conn, "%s", repoSizeString)
+	handleError(err, "Failed to get repo's size")
+
 	repoSize, _ := strconv.Atoi(repoSizeString)
 	buffer := make([]byte, repoSize)
 
 	// Download the repository to ./repos/NAME-vs/USER.tar.gz
 	repo.RepoStore = config.RepoPath + repo.Name + "-vs/"
+	err = os.Mkdir(config.RepoPath+repo.Name+"-vs/", os.FileMode(0777))
+	handleError(err, "Error Creating repo folder")
 
+	fmt.Println("Reading Bytes into buffer")
 	n, err := io.ReadFull(reader, buffer)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error Downloading Repository", err.Error())
-		panic(err)
-	}
+	handleError(err, "Error Downloading repo")
+
+	fmt.Println("Finishded Reading Bytes into buffer")
 
 	if n != repoSize {
 		fmt.Println("Didn't recive enough bytes")
 	}
 
-	// TODO This dosen't match the Server
-	ioutil.WriteFile(repo.RepoStore+node.Name+".tar.gz", buffer, 0644)
+	fmt.Println("Writting file into", repo.RepoStore+node.Name+".tar.gz")
+	//ioutil.WriteFile(repo.RepoStore+node.Name+".tar.gz", buffer, 0644)
+	f, err := os.Create(repo.RepoStore + node.Name + ".tar.gz")
+	handleError(err, "Error Creating Repository File")
+
+	defer f.Close()
+	f.Write(buffer)
 
 	// Extract compressed Repository
-
-	// Open the Repository
+	fmt.Println("Uncompressing file into ", repo.RepoStore)
+	err = uncompressRepo(repo.RepoStore+node.Name, repo.RepoStore)
+	handleError(err, "Error Extracting Repository")
 
 	// Send my name to the server
+	fmt.Fprintf(conn, config.Name)
+
+	// Add server to known peers
+	repo.AllPeers = append(repo.AllPeers, node.Name)
 
 	repo.Initilised = true
 
@@ -162,7 +163,7 @@ func (repo *Repository) Run(commandChannel chan string) {
 			case "connect":
 				if len(command) == 2 {
 					fmt.Println("Connecting to Server")
-					repo.Peers = append(repo.Peers, newClientNode(command[1]))
+					repo.Peers = append(repo.Peers, newClientNode(command[1], repo))
 				} else {
 					fmt.Println("Incorrect number of arguments")
 				}
@@ -190,10 +191,6 @@ func (repo *Repository) Run(commandChannel chan string) {
 
 		}
 	}
-
-}
-
-func cloneAccept(repo *Repository) {
 
 }
 

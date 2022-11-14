@@ -24,6 +24,13 @@ func handleStream(stream network.Stream) {
 	// 'stream' will stay open until you close it (or the other side closes it).
 }
 
+func handleError(err error, message string) {
+	if err != nil {
+		fmt.Fprintln(os.Stderr, message)
+		panic(err)
+	}
+}
+
 func main() {
 
 	inputReader := bufio.NewReader(os.Stdin)
