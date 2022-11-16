@@ -74,6 +74,11 @@ func loadConfig() UserConfig {
 
 func writeConfig(config UserConfig) {
 
+	// Clear all active peers
+	for _, repo := range config.Repos {
+		repo.Peers = repo.Peers[:0]
+	}
+
 	m, err := toml.Marshal(config)
 	if err != nil {
 		fmt.Fprint(os.Stderr, "Error Marshaling config")

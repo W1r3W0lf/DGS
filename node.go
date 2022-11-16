@@ -26,10 +26,32 @@ type NodeP2P struct {
 }
 
 type Node struct {
-	Name    string
-	Address string
-	Reader  *bufio.Reader
-	Writer  *bufio.Writer
+	Name        string
+	Address     string
+	Conn        net.Conn
+	Reader      *bufio.Reader
+	Writer      *bufio.Writer
+	ReadChannel chan string
+	KillDaemon  chan string
+}
+
+func (node *Node) NodeDaemon() {
+	for {
+		select {
+		case <-node.KillDaemon:
+			node.Conn.Close()
+			return
+		default:
+			command, _ := node.Reader.ReadString(' ')
+
+			if command != "" {
+				select {
+				case node.ReadChannel <- command:
+				default:
+				}
+			}
+		}
+	}
 }
 
 func newServerNode(address string, repo *Repository) Node {
@@ -41,28 +63,28 @@ func newServerNode(address string, repo *Repository) Node {
 	handleError(err, "Error listaning")
 
 	fmt.Println("Waiting for a client")
-	conn, err := listen.Accept()
+	node.Conn, err = listen.Accept()
 	handleError(err, "Error connecting to client")
 
 	fmt.Println("Client Connected")
-	node.Reader = bufio.NewReader(conn)
-	node.Writer = bufio.NewWriter(conn)
+	node.Reader = bufio.NewReader(node.Conn)
+	node.Writer = bufio.NewWriter(node.Conn)
 
 	var mode string
 	// Get command from client
-	_, err = fmt.Fscanf(conn, "%s", &mode)
+	_, err = fmt.Fscanf(node.Conn, "%s", &mode)
 	handleError(err, "Error getting command from client")
 
 	switch mode {
 	case "clone":
 		fmt.Println("Sending name")
 		// Send my name to peer
-		_, err = fmt.Fprintf(conn, repo.Self+" ")
+		_, err = fmt.Fprintf(node.Conn, repo.Self+" ")
 		handleError(err, "Error sending name to client")
 
 		fmt.Println("Sending repo name")
 		// Send repository name
-		_, err = fmt.Fprintf(conn, repo.Name+" ")
+		_, err = fmt.Fprintf(node.Conn, repo.Name+" ")
 		handleError(err, "Error sending repository name to client")
 
 		fmt.Println("Compressing file")
@@ -84,7 +106,7 @@ func newServerNode(address string, repo *Repository) Node {
 
 		fileSize := strconv.FormatInt(fileInfo.Size(), 10)
 
-		_, err = fmt.Fprintf(conn, fileSize+" ")
+		_, err = fmt.Fprintf(node.Conn, fileSize+" ")
 		handleError(err, "Error sending file size")
 		fmt.Println(fileSize)
 
@@ -95,12 +117,12 @@ func newServerNode(address string, repo *Repository) Node {
 		_, err = repoTar.Read(sendBuffer)
 		handleError(err, "Error reading repo into buffer")
 
-		_, err = conn.Write(sendBuffer)
+		_, err = node.Conn.Write(sendBuffer)
 		handleError(err, "Error sending data to client")
 		fmt.Println("Finished Sending File")
 
 		// Get the client's name
-		_, err = fmt.Fscanf(conn, "%s", &node.Name)
+		_, err = fmt.Fscanf(node.Conn, "%s", &node.Name)
 		handleError(err, "Error getting client's name")
 
 		// Add client to knwon peers
@@ -108,10 +130,10 @@ func newServerNode(address string, repo *Repository) Node {
 
 	case "connect":
 		// Send my name to peer
-		fmt.Fprintf(conn, repo.Self)
+		fmt.Fprintf(node.Conn, repo.Self)
 
 		// Get client's name
-		fmt.Fscanf(conn, "%s", node.Name)
+		fmt.Fscanf(node.Conn, "%s", node.Name)
 
 		// maybe? I'm not shure about this yet
 		// Search for the client's name
@@ -127,15 +149,16 @@ func newClientNode(address string, repo *Repository) Node {
 
 	node.Address = address
 
-	conn, err := net.Dial("tcp", address)
+	var err error
+	node.Conn, err = net.Dial("tcp", address)
 	handleError(err, "Error listaning")
 
-	node.Reader = bufio.NewReader(conn)
-	node.Writer = bufio.NewWriter(conn)
+	node.Reader = bufio.NewReader(node.Conn)
+	node.Writer = bufio.NewWriter(node.Conn)
 
 	// Ask to node's name
 
-	_, err = fmt.Fprintf(conn, "connect")
+	_, err = fmt.Fprintf(node.Conn, "connect")
 	handleError(err, "Error sending connection command to server")
 
 	// Get the server's name
@@ -143,7 +166,7 @@ func newClientNode(address string, repo *Repository) Node {
 	handleError(err, "Error getting server's name")
 
 	// Send my name
-	_, err = fmt.Fprintf(conn, repo.Self)
+	_, err = fmt.Fprintf(node.Conn, repo.Self)
 	handleError(err, "Error sending name")
 
 	return node

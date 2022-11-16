@@ -16,8 +16,8 @@ import (
 
 type Repository struct {
 	Name          string   // The name of the repository
-	ActiveVersion string   //The name of the user who's repository is being used
-	LinkPath      string   // The path to where the User is linked to
+	ActiveVersion string   // The name of the user who's repository is being used
+	ActiveRepo    string   // The name of the active repo
 	RepoStore     string   // The location where all of the diffrent versions are stored
 	Self          string   // The name of this node
 	Peers         []Node   // All connected Peers
@@ -25,8 +25,13 @@ type Repository struct {
 	Initilised    bool     // Has the repository been set up yet
 }
 
-func setRepoSymLink(repo Repository, peer string) {
+func (repo *Repository) SetRepoSymLink(peer string) {
 
+	abs, err := filepath.Abs(repo.RepoStore + repo.Name)
+	handleError(err, "Error getting an absolute path")
+
+	err = os.Symlink(abs, repo.RepoStore+repo.ActiveRepo)
+	handleError(err, "Error making symlink to repo")
 }
 
 func newRepository(path string, config UserConfig) Repository {
@@ -35,8 +40,8 @@ func newRepository(path string, config UserConfig) Repository {
 
 	repo.Name = filepath.Base(path)
 	repo.ActiveVersion = config.Name
-	repo.LinkPath = config.RepoPath + filepath.Base(path)
-	repo.RepoStore = config.RepoPath + filepath.Base(path) + "-vs/"
+	repo.ActiveRepo = repo.Self
+	repo.RepoStore = config.RepoPath + repo.Name + "-vs/"
 	repo.Peers = make([]Node, 0)
 	repo.AllPeers = make([]string, 0)
 
@@ -44,11 +49,7 @@ func newRepository(path string, config UserConfig) Repository {
 
 	git.PlainClone(repo.RepoStore+config.Name, true, &git.CloneOptions{URL: path})
 
-	abs, err := filepath.Abs(repo.RepoStore + repo.Name)
-	handleError(err, "Error getting an absolute path")
-
-	err = os.Symlink(abs, repo.LinkPath)
-	handleError(err, "Error making symlink to repo")
+	repo.SetRepoSymLink(repo.Self)
 
 	repo.Initilised = true
 
@@ -137,6 +138,8 @@ func cloneRepository(address string, config UserConfig) Repository {
 	// Add server to known peers
 	repo.AllPeers = append(repo.AllPeers, node.Name)
 
+	repo.SetRepoSymLink(repo.Self)
+
 	repo.Initilised = true
 
 	return repo
@@ -161,6 +164,7 @@ func (repo *Repository) Run(commandChannel chan string) {
 				if len(command) == 2 {
 					fmt.Println("Starting Server")
 					repo.Peers = append(repo.Peers, newServerNode(command[1], repo))
+					go repo.Peers[len(repo.Peers)-1].NodeDaemon()
 				} else {
 					fmt.Println("Incorrect number of arguments")
 				}
@@ -168,10 +172,15 @@ func (repo *Repository) Run(commandChannel chan string) {
 				if len(command) == 2 {
 					fmt.Println("Connecting to Server")
 					repo.Peers = append(repo.Peers, newClientNode(command[1], repo))
+					go repo.Peers[len(repo.Peers)-1].NodeDaemon()
 				} else {
 					fmt.Println("Incorrect number of arguments")
 				}
 			case "terminate":
+				// Kill all daemons
+				for _, peer := range repo.Peers {
+					peer.KillDaemon <- "Kill"
+				}
 
 			default:
 				fmt.Println("Unknown command")
@@ -183,13 +192,13 @@ func (repo *Repository) Run(commandChannel chan string) {
 
 		// Execute peer commands
 		for _, peer := range repo.Peers {
-			rawMessage, _ := peer.Reader.ReadString('\n')
-
-			message := strings.Split(rawMessage, "\n")
-
-			switch message[0] {
-			case "pull":
-				pullAccept(repo, peer)
+			select {
+			case command := <-peer.ReadChannel:
+				switch command {
+				case "pull":
+					pullAccept(repo, peer)
+				default:
+				}
 			default:
 			}
 
