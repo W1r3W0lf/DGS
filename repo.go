@@ -27,10 +27,13 @@ type Repository struct {
 
 func (repo *Repository) SetRepoSymLink(peer string) {
 
-	abs, err := filepath.Abs(repo.RepoStore + repo.Name)
+	target, err := filepath.Abs(repo.RepoStore + repo.ActiveRepo)
 	handleError(err, "Error getting an absolute path")
 
-	err = os.Symlink(abs, repo.RepoStore+repo.ActiveRepo)
+	destination, err := filepath.Abs(repo.RepoStore[:len(repo.RepoStore)-4])
+	handleError(err, "Error getting an absolute path")
+
+	err = os.Symlink(target, destination)
 	handleError(err, "Error making symlink to repo")
 }
 
