@@ -31,21 +31,25 @@ type Node struct {
 	Reader      *bufio.Reader
 	Writer      *bufio.Writer
 	ReadChannel chan string
-	KillDaemon  chan string
+	DaemonCMD   chan string
 }
 
 func (node *Node) NodeDaemon() {
 	for {
 		select {
-		case <-node.KillDaemon:
-			node.Conn.Close()
-			return
+		case command := <-node.DaemonCMD:
+			if command == "kill" {
+				node.Conn.Close()
+				return
+			} else if command == "pause" {
+				<-node.DaemonCMD
+			}
 		default:
-			command, _ := node.Reader.ReadString(' ')
+			incomingData, _ := node.Reader.ReadString(' ')
 
-			if command != "" {
+			if incomingData != "" {
 				select {
-				case node.ReadChannel <- command:
+				case node.ReadChannel <- incomingData:
 				default:
 				}
 			}
@@ -106,10 +110,14 @@ func newServerNode(address string, repo *Repository) Node {
 
 	case "connect":
 		// Send my name to peer
-		fmt.Fprintf(node.Conn, repo.Self+" ")
+		fmt.Println("Sending name to peer")
+		_, err = fmt.Fprintf(node.Conn, repo.Self+" ")
+		handleError(err, "Error sending name to peer")
 
 		// Get client's name
-		fmt.Fscanf(node.Conn, "%s", node.Name)
+		fmt.Println("Getting peer's name")
+		_, err = fmt.Fscanf(node.Conn, "%s", &node.Name)
+		handleError(err, "Error getting peer's name")
 
 		// maybe? I'm not shure about this yet
 		// Search for the client's name
@@ -139,12 +147,11 @@ func newClientNode(address string, repo *Repository) Node {
 	node.Writer = bufio.NewWriter(node.Conn)
 
 	// Ask to node's name
-
 	_, err = fmt.Fprintf(node.Conn, "connect ")
 	handleError(err, "Error sending connection command to server")
 
 	// Get the server's name
-	_, err = fmt.Fscanf(node.Reader, "%s", node.Name)
+	_, err = fmt.Fscanf(node.Reader, "%s", &node.Name)
 	handleError(err, "Error getting server's name")
 
 	// Send my name

@@ -156,7 +156,12 @@ func (repo *Repository) Run(commandChannel chan string) {
 
 			switch command[0] {
 			case "pull":
-				pullRequest(repo, command[1])
+				for _, peer := range repo.Peers {
+					if peer.Name == command[1] {
+						pullRequest(repo, peer)
+					}
+
+				}
 			case "accept":
 				if len(command) == 2 {
 					fmt.Println("Starting Server")
@@ -176,7 +181,7 @@ func (repo *Repository) Run(commandChannel chan string) {
 			case "terminate":
 				// Kill all daemons
 				for _, peer := range repo.Peers {
-					peer.KillDaemon <- "Kill"
+					peer.DaemonCMD <- "kill"
 				}
 
 			default:
@@ -193,21 +198,23 @@ func (repo *Repository) Run(commandChannel chan string) {
 			case command := <-peer.ReadChannel:
 				switch command {
 				case "pull":
+					fmt.Println("Processing Pull Request")
 					pullAccept(repo, peer)
 				default:
 				}
 			default:
 			}
-
 		}
 	}
 
 }
 
-func pullRequest(repo *Repository, peer string) {
-
+func pullRequest(repo *Repository, peer Node) {
+	peer.DaemonCMD <- "pause"
+	getRepo(repo.RepoStore+peer.Name+".tar.gz", peer.Conn, peer.Reader)
+	peer.DaemonCMD <- "resume"
 }
 
 func pullAccept(repo *Repository, peer Node) {
-
+	sendRepo(repo.RepoStore+repo.Self+".tar.gz", peer.Conn)
 }
