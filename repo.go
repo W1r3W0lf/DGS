@@ -4,25 +4,43 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/go-git/go-git/v5"
 )
 
 type Repository struct {
-	Name          string   // The name of the repository
-	ActiveVersion string   // The name of the user who's repository is being used
-	ActiveRepo    string   // The name of the active repo
-	RepoStore     string   // The location where all of the diffrent versions are stored
-	Self          string   // The name of this node
-	Peers         []Node   // All connected Peers
-	AllPeers      []string // All connected and disconnected Peers
-	Initilised    bool     // Has the repository been set up yet
+	Name       string   // The name of the repository
+	ActiveRepo string   // The name of the active repo
+	RepoStore  string   // The location where all of the diffrent versions are stored
+	Self       string   // The name of this node
+	Peers      []Node   // All connected Peers
+	AllPeers   []string // All connected and disconnected Peers
+	//Initilised bool     // Has the repository been set up yet
+}
+
+func (repo *Repository) Initilised() bool {
+	if repo.Name == "" {
+		fmt.Fprintln(os.Stderr, "Repo has no name")
+		return false
+	}
+	if repo.ActiveRepo == "" {
+		fmt.Fprintln(os.Stderr, "Repo has no activeRepo")
+		return false
+	}
+	if repo.RepoStore == "" {
+		fmt.Fprintln(os.Stderr, "Repo has no Store")
+		return false
+	}
+	if repo.Self == "" {
+		fmt.Fprintln(os.Stderr, "Repo dosen't have self set")
+		return false
+	}
+
+	return true
 }
 
 func (repo *Repository) SetRepoSymLink(peer string) {
@@ -42,7 +60,7 @@ func newRepository(path string, config UserConfig) Repository {
 	var repo Repository
 
 	repo.Name = filepath.Base(path)
-	repo.ActiveVersion = config.Name
+	repo.Self = config.Name
 	repo.ActiveRepo = repo.Self
 	repo.RepoStore = config.RepoPath + repo.Name + "-vs/"
 	repo.Peers = make([]Node, 0)
@@ -53,8 +71,6 @@ func newRepository(path string, config UserConfig) Repository {
 	git.PlainClone(repo.RepoStore+config.Name, true, &git.CloneOptions{URL: path})
 
 	repo.SetRepoSymLink(repo.Self)
-
-	repo.Initilised = true
 
 	return repo
 }
@@ -98,37 +114,13 @@ func cloneRepository(address string, config UserConfig) Repository {
 	_, err = fmt.Fscanf(conn, "%s", &repo.Name)
 	handleError(err, "Failed to get repo's name")
 
-	fmt.Println("Getting Repo's size")
-	// Get the number of bytes that need to be accepted
-	var repoSizeString string
-	_, err = fmt.Fscanf(conn, "%s", &repoSizeString)
-	handleError(err, "Failed to get repo's size")
-
-	repoSize, _ := strconv.Atoi(repoSizeString)
-	buffer := make([]byte, repoSize)
-
-	// Download the repository to ./repos/NAME-vs/USER.tar.gz
+	// make the ./repos/NAME-vs/ direcotry
 	repo.RepoStore = config.RepoPath + repo.Name + "-vs/"
 	err = os.Mkdir(config.RepoPath+repo.Name+"-vs/", os.FileMode(0777))
 	handleError(err, "Error Creating repo folder")
 
-	fmt.Println("Reading Bytes into buffer")
-	n, err := io.ReadFull(reader, buffer)
-	handleError(err, "Error Downloading repo")
-
-	fmt.Println("Finishded Reading Bytes into buffer")
-
-	if n != repoSize {
-		fmt.Println("Didn't recive enough bytes")
-	}
-
-	fmt.Println("Writting file into", repo.RepoStore+node.Name+".tar.gz")
-	//ioutil.WriteFile(repo.RepoStore+node.Name+".tar.gz", buffer, 0644)
-	f, err := os.Create(repo.RepoStore + node.Name + ".tar.gz")
-	handleError(err, "Error Creating Repository File")
-
-	defer f.Close()
-	f.Write(buffer)
+	fmt.Println("Getting repo")
+	getRepo(repo.RepoStore+node.Name+".tar.gz", conn, reader)
 
 	// Extract compressed Repository
 	fmt.Println("Uncompressing file into ", repo.RepoStore)
@@ -143,7 +135,9 @@ func cloneRepository(address string, config UserConfig) Repository {
 
 	repo.SetRepoSymLink(repo.Self)
 
-	repo.Initilised = true
+	// Finish setting up the repo
+	repo.Self = config.Name
+	repo.ActiveRepo = repo.Self
 
 	return repo
 }

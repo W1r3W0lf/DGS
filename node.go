@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"strconv"
 	"sync"
 
 	"github.com/libp2p/go-libp2p"
@@ -61,6 +60,7 @@ func newServerNode(address string, repo *Repository) Node {
 
 	listen, err := net.Listen("tcp", address)
 	handleError(err, "Error listaning")
+	defer listen.Close()
 
 	fmt.Println("Waiting for a client")
 	node.Conn, err = listen.Accept()
@@ -87,39 +87,15 @@ func newServerNode(address string, repo *Repository) Node {
 		_, err = fmt.Fprintf(node.Conn, repo.Name+" ")
 		handleError(err, "Error sending repository name to client")
 
-		fmt.Println("Compressing file")
 		// Compress My repository
+		fmt.Println("Compressing file")
 		err = compressRepo(repo.RepoStore+repo.Self, repo.RepoStore)
 		handleError(err, "Error compressing repo")
 
 		repoTarPath := repo.RepoStore + repo.Self + ".tar.gz"
 
-		// Get the size of the compressed repository
-		repoTar, err := os.Open(repoTarPath)
-		handleError(err, "Error opening repo tar file")
-		defer repoTar.Close()
-
-		fmt.Println("Sending File Size")
-		// Send the size of the repository
-		fileInfo, err := repoTar.Stat()
-		handleError(err, "Error getting tarfile size")
-
-		fileSize := strconv.FormatInt(fileInfo.Size(), 10)
-
-		_, err = fmt.Fprintf(node.Conn, fileSize+" ")
-		handleError(err, "Error sending file size")
-		fmt.Println(fileSize)
-
-		// Send the compressed repository
-		fmt.Println("Sending File")
-
-		sendBuffer := make([]byte, fileInfo.Size())
-		_, err = repoTar.Read(sendBuffer)
-		handleError(err, "Error reading repo into buffer")
-
-		_, err = node.Conn.Write(sendBuffer)
-		handleError(err, "Error sending data to client")
-		fmt.Println("Finished Sending File")
+		// Send repo
+		sendRepo(repoTarPath, node.Conn)
 
 		// Get the client's name
 		_, err = fmt.Fscanf(node.Conn, "%s", &node.Name)
@@ -130,7 +106,7 @@ func newServerNode(address string, repo *Repository) Node {
 
 	case "connect":
 		// Send my name to peer
-		fmt.Fprintf(node.Conn, repo.Self)
+		fmt.Fprintf(node.Conn, repo.Self+" ")
 
 		// Get client's name
 		fmt.Fscanf(node.Conn, "%s", node.Name)
@@ -138,9 +114,15 @@ func newServerNode(address string, repo *Repository) Node {
 		// maybe? I'm not shure about this yet
 		// Search for the client's name
 
+		for _, peer := range repo.AllPeers {
+			if node.Name == peer {
+			}
+		}
+
 		// If not found throw an error
 	}
 
+	//listen.Close()
 	return node
 }
 
@@ -158,7 +140,7 @@ func newClientNode(address string, repo *Repository) Node {
 
 	// Ask to node's name
 
-	_, err = fmt.Fprintf(node.Conn, "connect")
+	_, err = fmt.Fprintf(node.Conn, "connect ")
 	handleError(err, "Error sending connection command to server")
 
 	// Get the server's name
@@ -166,7 +148,7 @@ func newClientNode(address string, repo *Repository) Node {
 	handleError(err, "Error getting server's name")
 
 	// Send my name
-	_, err = fmt.Fprintf(node.Conn, repo.Self)
+	_, err = fmt.Fprintf(node.Conn, repo.Self+" ")
 	handleError(err, "Error sending name")
 
 	return node
