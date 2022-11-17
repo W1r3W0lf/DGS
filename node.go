@@ -35,22 +35,33 @@ type Node struct {
 }
 
 func (node *Node) NodeDaemon() {
+	fmt.Println("Daemon Started")
+	incomingData := ""
+	fmt.Fprintf(node.Writer, "1 ")
+	var err error
 	for {
 		select {
 		case command := <-node.DaemonCMD:
+			fmt.Println("D: Recived comand")
 			if command == "kill" {
 				node.Conn.Close()
 				return
 			} else if command == "pause" {
+				fmt.Println("Paused")
 				<-node.DaemonCMD
+				fmt.Println("Resuming")
 			}
+		case node.ReadChannel <- incomingData:
+			fmt.Println("D: Sent Data")
+			incomingData = ""
 		default:
-			incomingData, _ := node.Reader.ReadString(' ')
-
-			if incomingData != "" {
-				select {
-				case node.ReadChannel <- incomingData:
-				default:
+			if bytes := node.Reader.Buffered(); bytes > 0 {
+				fmt.Println("D: Reading Data")
+				incomingData, err = node.Reader.ReadString(' ')
+				handleError(err, "Daemon Error getting data")
+				fmt.Println("D: Read Data\"" + incomingData + "\"")
+				if incomingData == "1 " {
+					fmt.Fprintf(node.Writer, "1 ")
 				}
 			}
 		}
@@ -146,7 +157,7 @@ func newClientNode(address string, repo *Repository) Node {
 	node.Reader = bufio.NewReader(node.Conn)
 	node.Writer = bufio.NewWriter(node.Conn)
 
-	// Ask to node's name
+	// Send connect command
 	_, err = fmt.Fprintf(node.Conn, "connect ")
 	handleError(err, "Error sending connection command to server")
 

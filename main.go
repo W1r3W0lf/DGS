@@ -41,6 +41,14 @@ func main() {
 
 	var repo Repository
 
+	// If there is only one repo, then open it
+	if len(user.Repos) == 1 {
+		for _, rp := range user.Repos {
+			repo = rp
+			go repo.Run(repoChan)
+		}
+	}
+
 	for {
 		//Take user input
 		fmt.Print(">")

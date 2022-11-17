@@ -156,17 +156,21 @@ func (repo *Repository) Run(commandChannel chan string) {
 
 			switch command[0] {
 			case "pull":
-				for _, peer := range repo.Peers {
-					if peer.Name == command[1] {
-						pullRequest(repo, peer)
+				if len(command) == 2 {
+					fmt.Println("Pulling from " + command[1])
+					for _, peer := range repo.Peers {
+						if peer.Name == command[1] {
+							pullRequest(repo, peer)
+						}
 					}
-
+				} else {
+					fmt.Println("Incorrect number of arguments")
 				}
 			case "accept":
 				if len(command) == 2 {
 					fmt.Println("Starting Server")
 					repo.Peers = append(repo.Peers, newServerNode(command[1], repo))
-					go repo.Peers[len(repo.Peers)-1].NodeDaemon()
+					//go repo.Peers[len(repo.Peers)-1].NodeDaemon()
 				} else {
 					fmt.Println("Incorrect number of arguments")
 				}
@@ -174,7 +178,7 @@ func (repo *Repository) Run(commandChannel chan string) {
 				if len(command) == 2 {
 					fmt.Println("Connecting to Server")
 					repo.Peers = append(repo.Peers, newClientNode(command[1], repo))
-					go repo.Peers[len(repo.Peers)-1].NodeDaemon()
+					//go repo.Peers[len(repo.Peers)-1].NodeDaemon()
 				} else {
 					fmt.Println("Incorrect number of arguments")
 				}
@@ -183,6 +187,8 @@ func (repo *Repository) Run(commandChannel chan string) {
 				for _, peer := range repo.Peers {
 					peer.DaemonCMD <- "kill"
 				}
+			case "ping":
+				fmt.Println("pong")
 
 			default:
 				fmt.Println("Unknown command")
@@ -193,26 +199,52 @@ func (repo *Repository) Run(commandChannel chan string) {
 		}
 
 		// Execute peer commands
-		for _, peer := range repo.Peers {
-			select {
-			case command := <-peer.ReadChannel:
-				switch command {
-				case "pull":
-					fmt.Println("Processing Pull Request")
-					pullAccept(repo, peer)
+		/*
+			for _, peer := range repo.Peers {
+				select {
+				case command := <-peer.ReadChannel:
+					fmt.Println("Recived command from daemon")
+					switch command {
+					case "pull":
+						fmt.Println("Processing Pull Request")
+						pullAccept(repo, peer)
+					default:
+					}
 				default:
 				}
-			default:
+			}
+		*/
+
+		var command string
+		for _, peer := range repo.Peers {
+			if bytes := peer.Reader.Buffered(); bytes > 1 {
+				fmt.Println(bytes)
+				_, err := fmt.Fscanf(peer.Conn, "%s", &command)
+				handleError(err, "Failed to read message from peer")
+
+				fmt.Println("recived command \"" + command + "\"")
+
+				command := strings.Split(command, " ")
+
+				switch command[0] {
+				case "pull":
+					fmt.Println("Pull accepted")
+					pullAccept(repo, peer)
+				}
 			}
 		}
 	}
-
 }
 
 func pullRequest(repo *Repository, peer Node) {
-	peer.DaemonCMD <- "pause"
+	_, err := fmt.Fprintf(peer.Conn, "pull ")
+	handleError(err, "Failed to send pull command")
+	fmt.Println("Sent pull request")
+	//fmt.Println("Pausing Deamon")
+	//peer.DaemonCMD <- "pause"
+	//fmt.Println("Paused Deamon")
 	getRepo(repo.RepoStore+peer.Name+".tar.gz", peer.Conn, peer.Reader)
-	peer.DaemonCMD <- "resume"
+	//peer.DaemonCMD <- "resume"
 }
 
 func pullAccept(repo *Repository, peer Node) {
