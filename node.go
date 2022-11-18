@@ -25,47 +25,11 @@ type NodeP2P struct {
 }
 
 type Node struct {
-	Name        string
-	Address     string
-	Conn        net.Conn
-	Reader      *bufio.Reader
-	Writer      *bufio.Writer
-	ReadChannel chan string
-	DaemonCMD   chan string
-}
-
-func (node *Node) NodeDaemon() {
-	fmt.Println("Daemon Started")
-	incomingData := ""
-	fmt.Fprintf(node.Writer, "1 ")
-	var err error
-	for {
-		select {
-		case command := <-node.DaemonCMD:
-			fmt.Println("D: Recived comand")
-			if command == "kill" {
-				node.Conn.Close()
-				return
-			} else if command == "pause" {
-				fmt.Println("Paused")
-				<-node.DaemonCMD
-				fmt.Println("Resuming")
-			}
-		case node.ReadChannel <- incomingData:
-			fmt.Println("D: Sent Data")
-			incomingData = ""
-		default:
-			if bytes := node.Reader.Buffered(); bytes > 0 {
-				fmt.Println("D: Reading Data")
-				incomingData, err = node.Reader.ReadString(' ')
-				handleError(err, "Daemon Error getting data")
-				fmt.Println("D: Read Data\"" + incomingData + "\"")
-				if incomingData == "1 " {
-					fmt.Fprintf(node.Writer, "1 ")
-				}
-			}
-		}
-	}
+	Name    string
+	Address string
+	Conn    net.Conn
+	Reader  *bufio.Reader
+	Writer  *bufio.Writer
 }
 
 func newServerNode(address string, repo *Repository) Node {
@@ -75,7 +39,7 @@ func newServerNode(address string, repo *Repository) Node {
 
 	listen, err := net.Listen("tcp", address)
 	handleError(err, "Error listaning")
-	defer listen.Close()
+	//defer listen.Close()
 
 	fmt.Println("Waiting for a client")
 	node.Conn, err = listen.Accept()

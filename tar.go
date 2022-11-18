@@ -13,6 +13,8 @@ import (
 	"strings"
 )
 
+// TODO send and get repo are both broken
+
 func sendRepo(repoTarPath string, out net.Conn) {
 
 	// Get the size of the compressed repository
@@ -49,11 +51,13 @@ func getRepo(repoPath string, in net.Conn, reader *bufio.Reader) {
 	_, err := fmt.Fscanf(in, "%s", &repoSizeString)
 	handleError(err, "Failed to get repo's size")
 
-	repoSize, _ := strconv.Atoi(repoSizeString)
+	repoSize, err := strconv.Atoi(repoSizeString)
+	handleError(err, "error converting tar size to int")
 	buffer := make([]byte, repoSize)
 
 	fmt.Println("Reading Bytes into buffer")
-	n, err := io.ReadFull(reader, buffer)
+	//n, err := io.ReadFull(reader, buffer)
+	n, err := io.ReadFull(in, buffer)
 	handleError(err, "Error Downloading repo")
 
 	fmt.Println("Finishded Reading Bytes into buffer")

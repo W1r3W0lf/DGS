@@ -147,6 +147,7 @@ func (repo *Repository) Run(commandChannel chan string) {
 
 	var cmd string
 
+	go handlePeerCommands(repo)
 	for {
 
 		// Execute user commands
@@ -184,11 +185,18 @@ func (repo *Repository) Run(commandChannel chan string) {
 				}
 			case "terminate":
 				// Kill all daemons
-				for _, peer := range repo.Peers {
-					peer.DaemonCMD <- "kill"
-				}
 			case "ping":
 				fmt.Println("pong")
+
+			case "peers":
+				fmt.Println("Connected:")
+				for _, peer := range repo.Peers {
+					fmt.Println(peer.Name)
+				}
+				fmt.Println("\nAll:")
+				for _, peer := range repo.AllPeers {
+					fmt.Println(peer)
+				}
 
 			default:
 				fmt.Println("Unknown command")
@@ -215,26 +223,54 @@ func (repo *Repository) Run(commandChannel chan string) {
 			}
 		*/
 
+		/*
+			var command string
+			for _, peer := range repo.Peers {
+				if bytes := peer.Reader.Buffered(); bytes > 1 {
+					fmt.Println(bytes)
+					_, err := fmt.Fscanf(peer.Conn, "%s", &command)
+					//command, err := peer.Reader.ReadString(' ')
+					handleError(err, "Failed to read message from peer")
+
+					fmt.Println("recived command \"" + command + "\"")
+
+					//command = strings.Split(command, " ")
+
+					switch command {
+					case "pull ":
+						fmt.Println("Pull accepted")
+						pullAccept(repo, peer)
+					}
+				}
+			}
+		*/
+
+	}
+}
+
+func handlePeerCommands(repo *Repository) {
+	for {
 		var command string
 		for _, peer := range repo.Peers {
-			if bytes := peer.Reader.Buffered(); bytes > 1 {
-				fmt.Println(bytes)
-				_, err := fmt.Fscanf(peer.Conn, "%s", &command)
-				handleError(err, "Failed to read message from peer")
+			_, err := fmt.Fscanf(peer.Conn, "%s", &command)
+			//command, err := peer.Reader.ReadString(' ')
+			handleError(err, "Failed to read message from peer")
 
-				fmt.Println("recived command \"" + command + "\"")
+			fmt.Println("recived command \"" + command + "\"")
 
-				command := strings.Split(command, " ")
+			//command = strings.Split(command, " ")
 
-				switch command[0] {
-				case "pull":
-					fmt.Println("Pull accepted")
-					pullAccept(repo, peer)
-				}
+			switch command {
+			case "pull":
+				fmt.Println("Pull accepted")
+				pullAccept(repo, peer)
 			}
 		}
 	}
 }
+
+// TODO Pulling should come from the Owners repository
+// TODO Create an Onwer repository and delete the .tar and .tar.gz files
 
 func pullRequest(repo *Repository, peer Node) {
 	_, err := fmt.Fprintf(peer.Conn, "pull ")

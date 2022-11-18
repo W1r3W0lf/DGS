@@ -51,7 +51,7 @@ func main() {
 
 	for {
 		//Take user input
-		fmt.Print(">")
+		fmt.Fprintf(os.Stdout, ">")
 
 		command, rawCommand := getCommand(inputReader)
 
