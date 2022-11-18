@@ -30,6 +30,8 @@ type Node struct {
 	Conn    net.Conn
 	Reader  *bufio.Reader
 	Writer  *bufio.Writer
+	Daemon  bool
+	Command chan string
 }
 
 func newServerNode(address string, repo *Repository) Node {

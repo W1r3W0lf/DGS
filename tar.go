@@ -2,7 +2,6 @@ package main
 
 import (
 	"archive/tar"
-	"bufio"
 	"compress/gzip"
 	"fmt"
 	"io"
@@ -12,8 +11,6 @@ import (
 	"strconv"
 	"strings"
 )
-
-// TODO send and get repo are both broken
 
 func sendRepo(repoTarPath string, out net.Conn) {
 
@@ -42,7 +39,7 @@ func sendRepo(repoTarPath string, out net.Conn) {
 	fmt.Println("Finished Sending File")
 }
 
-func getRepo(repoPath string, in net.Conn, reader *bufio.Reader) {
+func getRepo(repoPath string, in net.Conn) {
 
 	fmt.Println("Getting Repo's size")
 	// Get the number of bytes that need to be accepted
@@ -56,8 +53,7 @@ func getRepo(repoPath string, in net.Conn, reader *bufio.Reader) {
 	buffer := make([]byte, repoSize)
 
 	fmt.Println("Reading Bytes into buffer")
-	//n, err := io.ReadFull(reader, buffer)
-	n, err := io.ReadFull(in, buffer)
+	n, err := in.Read(buffer)
 	handleError(err, "Error Downloading repo")
 
 	fmt.Println("Finishded Reading Bytes into buffer")
