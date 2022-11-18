@@ -66,6 +66,7 @@ func main() {
 				writeConfig(user)
 
 				go repo.Run(repoChan)
+
 			}
 		case "open":
 			if repo.Initilised() {
@@ -87,13 +88,14 @@ func main() {
 			}
 		case "close":
 			if repo.Initilised() {
-				fmt.Println("No Repository to close")
-			} else {
 				repoChan <- "terminate"
 				// Save Repository to config
 				user.Repos[repo.Name] = repo
 				// Uninitilise repository
 				writeConfig(user)
+				repo.Name = ""
+			} else {
+				fmt.Println("No Repository to close")
 			}
 
 		case "exit":
@@ -109,7 +111,7 @@ func main() {
 		case "terminate":
 			fmt.Println("Unknown command")
 		case "help":
-			fmt.Println("new PATH\nopen NAME\nconnect ip:port\naccept :port")
+			fmt.Println("new PATH\nopen NAME\nclone ip:port\nclose\nexit\nconnect ip:port\naccept :port\nping")
 		default:
 			if repo.Initilised() {
 				repoChan <- rawCommand

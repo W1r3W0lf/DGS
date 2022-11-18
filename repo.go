@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 )
 
 type Repository struct {
@@ -55,22 +56,33 @@ func (repo *Repository) SetRepoSymLink(peer string) {
 	handleError(err, "Error making symlink to repo")
 }
 
-func newRepository(path string, config UserConfig) Repository {
+func newRepository(path string, uConfig UserConfig) Repository {
 
 	var repo Repository
 
 	repo.Name = filepath.Base(path)
-	repo.Self = config.Name
+	repo.Self = uConfig.Name
 	repo.ActiveRepo = repo.Self
-	repo.RepoStore = config.RepoPath + repo.Name + "-vs/"
+	repo.RepoStore = uConfig.RepoPath + repo.Name + "-vs/"
 	repo.Peers = make([]Node, 0)
 	repo.AllPeers = make([]string, 0)
 
-	repo.Self = config.Name
+	repo.Self = uConfig.Name
 
-	git.PlainClone(repo.RepoStore+config.Name, true, &git.CloneOptions{URL: path})
+	git.PlainClone(repo.RepoStore+uConfig.Name, true, &git.CloneOptions{URL: path})
 
 	repo.SetRepoSymLink(repo.Self)
+
+	destination, err := filepath.Abs(repo.RepoStore[:len(repo.RepoStore)-4])
+	handleError(err, "Error getting an absolute path")
+
+	r, err := git.PlainOpen(path)
+	handleError(err, "Error opening original repository")
+	r.CreateRemote(&config.RemoteConfig{Name: "DGS", URLs: []string{destination}})
+
+	handleError(err, "Error getting the absolute path of the symlink to the repository")
+
+	fmt.Println("DGS has been added as remote DGS in your repository")
 
 	return repo
 }
@@ -183,6 +195,7 @@ func (repo *Repository) Run(commandChannel chan string) {
 				}
 			case "terminate":
 				// Kill all daemons
+				return
 			case "ping":
 				fmt.Println("pong")
 
