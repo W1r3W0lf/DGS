@@ -158,6 +158,8 @@ func cloneRepository(address string, config UserConfig) Repository {
 	// Add server to known peers
 	repo.AllPeers = append(repo.AllPeers, node.Name)
 
+	repo.Peers = append(repo.Peers, node)
+
 	repo.SetRepoSymLink(repo.Self)
 
 	return repo

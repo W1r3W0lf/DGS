@@ -104,6 +104,8 @@ func newServerNode(address string, repo *Repository) Node {
 			}
 		}
 
+		repo.AllPeers = append(repo.AllPeers, node.Name)
+
 		// If not found throw an error
 	}
 
@@ -134,6 +136,8 @@ func newClientNode(address string, repo *Repository) Node {
 	// Send my name
 	_, err = fmt.Fprintf(node.Conn, repo.Self+" ")
 	handleError(err, "Error sending name")
+
+	repo.AllPeers = append(repo.AllPeers, node.Name)
 
 	return node
 }
