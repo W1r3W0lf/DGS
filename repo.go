@@ -105,6 +105,9 @@ func cloneRepository(address string, config UserConfig) Repository {
 	var node Node
 	var err error
 
+	repo.Self = config.Name
+	repo.ActiveRepo = repo.Self
+
 	node.Address = address
 	// Make a TCP connection to the server
 	node.Conn, err = net.Dial("tcp", address)
@@ -140,6 +143,15 @@ func cloneRepository(address string, config UserConfig) Repository {
 	err = uncompressRepo(repo.RepoStore+node.Name, repo.RepoStore)
 	handleError(err, "Error Extracting Repository")
 
+	// Rename direcotry to make it mine
+	err = os.Rename(repo.RepoStore+node.Name, repo.RepoStore+repo.Self)
+	handleError(err, "Error renaming the repo into my directory")
+
+	// Extract compressed Repository again to be the remote's repo
+	fmt.Println("Uncompressing file into ", repo.RepoStore)
+	err = uncompressRepo(repo.RepoStore+node.Name, repo.RepoStore)
+	handleError(err, "Error Extracting Repository")
+
 	// Send my name to the server
 	fmt.Fprintf(node.Conn, config.Name+" ")
 
@@ -147,10 +159,6 @@ func cloneRepository(address string, config UserConfig) Repository {
 	repo.AllPeers = append(repo.AllPeers, node.Name)
 
 	repo.SetRepoSymLink(repo.Self)
-
-	// Finish setting up the repo
-	repo.Self = config.Name
-	repo.ActiveRepo = repo.Self
 
 	return repo
 }
