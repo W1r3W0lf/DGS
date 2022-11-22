@@ -3,9 +3,12 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/libp2p/go-libp2p"
@@ -28,59 +31,194 @@ type Node struct {
 	Name    string
 	Address string
 	Conn    net.Conn
-	Reader  *bufio.Reader
-	Writer  *bufio.Writer
-	Daemon  bool
-	Command chan string
+	Daemons bool
+	// TODO Semaphor for network access
+	Read  chan string
+	Write chan string
 }
 
-func newServerNode(address string, repo *Repository) Node {
+func newNode(address string, repo *Repository, server bool) Node {
 	var node Node
-	// Set the node's name
+	node.StartConnection(address, server)
+	node.Daemons = true
+	node.Read = make(chan string)
+	go node.ReadDaemon(repo)
+	node.Write = make(chan string)
+	go node.WriteDaemon(repo)
+
+	if server {
+		node.NewServerNode(repo)
+	} else {
+		node.NewClientNode(repo)
+	}
+
+	return node
+}
+
+func (node *Node) StartConnection(address string, server bool) {
 	node.Address = address
+	var err error
 
-	listen, err := net.Listen("tcp", address)
-	handleError(err, "Error listaning")
-	//defer listen.Close()
+	if server {
+		listen, err := net.Listen("tcp", address)
+		handleError(err, "Error listaning")
+		defer listen.Close()
 
-	fmt.Println("Waiting for a client")
-	node.Conn, err = listen.Accept()
-	handleError(err, "Error connecting to client")
+		fmt.Println("Waiting for a Connection")
+		node.Conn, err = listen.Accept()
+		handleError(err, "Error connecting to client")
+
+	} else {
+		node.Conn, err = net.Dial("tcp", address)
+		handleError(err, "Error listaning")
+	}
+
+}
+
+func (node *Node) ReadDaemon(repo *Repository) {
+
+	var message string
+	fmt.Println("Read Daemon Strated")
+
+	for {
+		// Wait for incomming data
+		fmt.Println("Wating for a message to read")
+		_, err := fmt.Fscanf(node.Conn, "%s", &message)
+		handleError(err, "Sending message"+message)
+		message = strings.TrimSpace(message)
+
+		fmt.Println("Receved\"" + message + "\"")
+		// If that data is pull call go acceptPull
+		switch message {
+		case "pull":
+			// Launch pull process
+			go pullAccept(repo, node)
+		default:
+			// If not then pass that data into the Read Channel
+			node.Read <- message
+		}
+		if !node.Daemons {
+			return
+		}
+	}
+}
+
+func (node *Node) WriteDaemon(repo *Repository) {
+
+	var message string
+	fmt.Println("Write Daemon Strated")
+
+	for {
+		fmt.Println("Wating for a message to send")
+		message = <-node.Write
+		fmt.Println("Writting \"" + message + "\"")
+
+		_, err := fmt.Fprintf(node.Conn, message+" ")
+		handleError(err, "Reading message"+message)
+
+		if !node.Daemons {
+			return
+		}
+	}
+}
+
+func (node *Node) SendRepo(repoTarPath string, repo *Repository) {
+
+	if _, err := os.Stat(repoTarPath); err != nil {
+		fmt.Println("Compressing file")
+		err := compressRepo(repo.RepoStore+repo.Self, repo.RepoStore)
+		handleError(err, "Error compressing repo")
+	}
+
+	// Get the size of the compressed repository
+	repoTar, err := os.Open(repoTarPath)
+	handleError(err, "Error opening repo tar file")
+	defer repoTar.Close()
+
+	// Send the size of the repository
+	fileInfo, err := repoTar.Stat()
+	handleError(err, "Error getting tarfile size")
+
+	fileSize := strconv.FormatInt(fileInfo.Size(), 10)
+
+	node.Write <- fileSize
+
+	fmt.Println(fileSize)
+
+	// Send the compressed repository
+	sendBuffer := make([]byte, fileInfo.Size())
+	_, err = repoTar.Read(sendBuffer)
+	handleError(err, "Error reading repo into buffer")
+
+	sendString := base64.StdEncoding.EncodeToString(sendBuffer)
+
+	node.Write <- sendString
+
+	//_, err = out.Write(sendBuffer)
+	//handleError(err, "Error sending data to client")
+	fmt.Println("Finished Sending File")
+}
+
+func (node *Node) GetRepo(repoPath string) {
+
+	fmt.Println("Getting Repo's size")
+	// Get the number of bytes that need to be accepted
+
+	repoSizeString := <-node.Read
+
+	repoSize, err := strconv.Atoi(repoSizeString)
+	handleError(err, "error converting tar size to int")
+	buffer := make([]byte, repoSize)
+
+	fmt.Println("Reading Bytes into buffer")
+	//n, err := in.Read(buffer)
+	//handleError(err, "Error Downloading repo")
+
+	fileBase64 := <-node.Read
+	n, err := base64.StdEncoding.Decode(buffer, ([]byte(fileBase64)))
+	fmt.Println("Finishded Reading Bytes into buffer")
+
+	if n != repoSize {
+		fmt.Println("Didn't recive enough bytes")
+	}
+
+	f, err := os.Create(repoPath)
+	handleError(err, "Error Creating Repository File")
+
+	defer f.Close()
+	f.Write(buffer)
+
+}
+
+func (node *Node) NewServerNode(repo *Repository) {
 
 	fmt.Println("Client Connected")
-	node.Reader = bufio.NewReader(node.Conn)
-	node.Writer = bufio.NewWriter(node.Conn)
 
-	var mode string
 	// Get command from client
-	_, err = fmt.Fscanf(node.Conn, "%s", &mode)
-	handleError(err, "Error getting command from client")
+	mode := <-node.Read
 
 	switch mode {
 	case "clone":
 		fmt.Println("Sending name")
 		// Send my name to peer
-		_, err = fmt.Fprintf(node.Conn, repo.Self+" ")
-		handleError(err, "Error sending name to client")
+		node.Write <- repo.Self
 
 		fmt.Println("Sending repo name")
 		// Send repository name
-		_, err = fmt.Fprintf(node.Conn, repo.Name+" ")
-		handleError(err, "Error sending repository name to client")
+		node.Write <- repo.Name
 
 		// Compress My repository
 		fmt.Println("Compressing file")
-		err = compressRepo(repo.RepoStore+repo.Self, repo.RepoStore)
+		err := compressRepo(repo.RepoStore+repo.Self, repo.RepoStore)
 		handleError(err, "Error compressing repo")
 
 		repoTarPath := repo.RepoStore + repo.Self + ".tar.gz"
 
 		// Send repo
-		sendRepo(repoTarPath, node.Conn)
+		node.SendRepo(repoTarPath, repo)
 
 		// Get the client's name
-		_, err = fmt.Fscanf(node.Conn, "%s", &node.Name)
-		handleError(err, "Error getting client's name")
+		node.Name = <-node.Read
 
 		// Add client to knwon peers
 		repo.AllPeers = append(repo.AllPeers, node.Name)
@@ -88,13 +226,11 @@ func newServerNode(address string, repo *Repository) Node {
 	case "connect":
 		// Send my name to peer
 		fmt.Println("Sending name to peer")
-		_, err = fmt.Fprintf(node.Conn, repo.Self+" ")
-		handleError(err, "Error sending name to peer")
+		node.Write <- repo.Self
 
 		// Get client's name
 		fmt.Println("Getting peer's name")
-		_, err = fmt.Fscanf(node.Conn, "%s", &node.Name)
-		handleError(err, "Error getting peer's name")
+		node.Name = <-node.Read
 
 		// maybe? I'm not shure about this yet
 		// Search for the client's name
@@ -109,37 +245,21 @@ func newServerNode(address string, repo *Repository) Node {
 		// If not found throw an error
 	}
 
-	//listen.Close()
-	return node
 }
 
-func newClientNode(address string, repo *Repository) Node {
-	var node Node
-
-	node.Address = address
-
-	var err error
-	node.Conn, err = net.Dial("tcp", address)
-	handleError(err, "Error listaning")
-
-	node.Reader = bufio.NewReader(node.Conn)
-	node.Writer = bufio.NewWriter(node.Conn)
+func (node *Node) NewClientNode(repo *Repository) {
 
 	// Send connect command
-	_, err = fmt.Fprintf(node.Conn, "connect ")
-	handleError(err, "Error sending connection command to server")
+	node.Write <- "connect"
 
 	// Get the server's name
-	_, err = fmt.Fscanf(node.Reader, "%s", &node.Name)
-	handleError(err, "Error getting server's name")
+	node.Name = <-node.Read
 
 	// Send my name
-	_, err = fmt.Fprintf(node.Conn, repo.Self+" ")
-	handleError(err, "Error sending name")
+	node.Write <- repo.Self
 
 	repo.AllPeers = append(repo.AllPeers, node.Name)
 
-	return node
 }
 
 /*

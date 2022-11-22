@@ -37,15 +37,12 @@ func main() {
 	user := startUser(inputReader)
 	fmt.Println("Welcome back", user.Name)
 
-	repoChan := make(chan string)
-
 	var repo Repository
 
 	// If there is only one repo, then open it
 	if len(user.Repos) == 1 {
 		for _, rp := range user.Repos {
 			repo = rp
-			go repo.Run(repoChan)
 		}
 	}
 
@@ -53,7 +50,7 @@ func main() {
 		//Take user input
 		fmt.Fprintf(os.Stdout, ">")
 
-		command, rawCommand := getCommand(inputReader)
+		command, _ := getCommand(inputReader)
 
 		switch command[0] {
 		case "new":
@@ -65,15 +62,12 @@ func main() {
 				user.Repos[repo.Name] = repo
 				writeConfig(user)
 
-				go repo.Run(repoChan)
-
 			}
 		case "open":
 			if repo.Initilised() {
 				fmt.Println("Repo alredy initilised")
 			} else {
 				repo = user.Repos[command[1]]
-				go repo.Run(repoChan)
 			}
 		case "clone":
 			if repo.Initilised() {
@@ -84,11 +78,10 @@ func main() {
 				user.Repos[repo.Name] = repo
 				writeConfig(user)
 
-				go repo.Run(repoChan)
 			}
 		case "close":
 			if repo.Initilised() {
-				repoChan <- "terminate"
+				//command = "terminate"
 				// Save Repository to config
 				user.Repos[repo.Name] = repo
 				// Uninitilise repository
@@ -100,7 +93,7 @@ func main() {
 
 		case "exit":
 			if repo.Initilised() {
-				repoChan <- "terminate"
+				//command = "terminate"
 				// Close Repository
 				user.Repos[repo.Name] = repo
 			}
@@ -114,7 +107,7 @@ func main() {
 			fmt.Println("new PATH\nopen NAME\nclone ip:port\nclose\nexit\nconnect ip:port\naccept :port\nping")
 		default:
 			if repo.Initilised() {
-				repoChan <- rawCommand
+				repo.Run(command)
 			} else {
 				fmt.Println("Unknown command\nRepo Not started")
 			}

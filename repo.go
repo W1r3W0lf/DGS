@@ -1,13 +1,10 @@
 package main
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
@@ -102,33 +99,31 @@ func openRepository(name string, config UserConfig) (Repository, error) {
 func cloneRepository(address string, config UserConfig) Repository {
 
 	var repo Repository
-	var node Node
 	var err error
 
 	repo.Self = config.Name
 	repo.ActiveRepo = repo.Self
 
-	node.Address = address
 	// Make a TCP connection to the server
-	node.Conn, err = net.Dial("tcp", address)
-	handleError(err, "Failed to connect")
-	node.Reader = bufio.NewReader(node.Conn)
-	node.Writer = bufio.NewWriter(node.Conn)
+	var node Node
+	node.StartConnection(address, false)
+	node.Daemons = true
+	node.Read = make(chan string)
+	go node.ReadDaemon(&repo)
+	node.Write = make(chan string)
+	go node.WriteDaemon(&repo)
 
 	fmt.Println("Sending Clone command")
 	// Send the clone command
-	_, err = fmt.Fprintf(node.Conn, "clone ")
-	handleError(err, "Failed to send clone command")
+	node.Write <- "clone"
 
 	fmt.Println("Getting Server's name")
 	// Get the Repository name, and the server's peer name
-	_, err = fmt.Fscanf(node.Conn, "%s", &node.Name)
-	handleError(err, "Failed to get server's name")
+	node.Name = <-node.Read
 
 	fmt.Println("Getting Repo's name")
 
-	_, err = fmt.Fscanf(node.Conn, "%s", &repo.Name)
-	handleError(err, "Failed to get repo's name")
+	repo.Name = <-node.Read
 
 	// make the ./repos/NAME-vs/ direcotry
 	repo.RepoStore = config.RepoPath + repo.Name + "-vs/"
@@ -136,7 +131,7 @@ func cloneRepository(address string, config UserConfig) Repository {
 	handleError(err, "Error Creating repo folder")
 
 	fmt.Println("Getting repo")
-	getRepo(repo.RepoStore+node.Name+".tar.gz", node.Conn)
+	node.GetRepo(repo.RepoStore + node.Name + ".tar.gz")
 
 	// Extract compressed Repository
 	fmt.Println("Uncompressing file into ", repo.RepoStore)
@@ -153,7 +148,7 @@ func cloneRepository(address string, config UserConfig) Repository {
 	handleError(err, "Error Extracting Repository")
 
 	// Send my name to the server
-	fmt.Fprintf(node.Conn, config.Name+" ")
+	node.Write <- config.Name
 
 	// Add server to known peers
 	repo.AllPeers = append(repo.AllPeers, node.Name)
@@ -165,110 +160,69 @@ func cloneRepository(address string, config UserConfig) Repository {
 	return repo
 }
 
-func (repo *Repository) Run(commandChannel chan string) {
+func (repo *Repository) Run(command []string) {
 	fmt.Println("Strting", repo.Name)
 
-	var cmd string
-
-	for {
-		// Execute user commands
-		select {
-		case cmd = <-commandChannel:
-			command := strings.Split(cmd, " ")
-			switch command[0] {
-			case "pull":
-				if len(command) == 2 {
-					fmt.Println("Pulling from " + command[1])
-					for _, peer := range repo.Peers {
-						if peer.Name == command[1] {
-							pullRequest(repo, peer)
-						}
-					}
-				} else {
-					fmt.Println("Incorrect number of arguments")
+	// Execute user commands
+	switch command[0] {
+	case "pull":
+		if len(command) == 2 {
+			fmt.Println("Pulling from " + command[1])
+			for _, peer := range repo.Peers {
+				if peer.Name == command[1] {
+					pullRequest(repo, &peer)
 				}
-			case "accept":
-				if len(command) == 2 {
-					fmt.Println("Starting Server")
-					repo.Peers = append(repo.Peers, newServerNode(command[1], repo))
-					repo.Peers[len(repo.Peers)-1].Command = make(chan string, 0)
-				} else {
-					fmt.Println("Incorrect number of arguments")
-				}
-			case "connect":
-				if len(command) == 2 {
-					fmt.Println("Connecting to Server")
-					repo.Peers = append(repo.Peers, newClientNode(command[1], repo))
-					repo.Peers[len(repo.Peers)-1].Command = make(chan string, 0)
-				} else {
-					fmt.Println("Incorrect number of arguments")
-				}
-			case "terminate":
-				// Kill all daemons
-				return
-			case "ping":
-				fmt.Println("pong")
-
-			case "peers":
-				fmt.Println("Connected:")
-				for _, peer := range repo.Peers {
-					fmt.Println(peer.Name)
-				}
-				fmt.Println("\nAll:")
-				for _, peer := range repo.AllPeers {
-					fmt.Println(peer)
-				}
-
-			default:
-				fmt.Println("Unknown command")
 			}
+		} else {
+			fmt.Println("Incorrect number of arguments")
+		}
+	case "accept":
+		if len(command) == 2 {
+			fmt.Println("Starting Server")
+			newPeer := newNode(command[1], repo, true)
+			repo.Peers = append(repo.Peers, newPeer)
+		} else {
+			fmt.Println("Incorrect number of arguments")
+		}
+	case "connect":
+		if len(command) == 2 {
+			fmt.Println("Connecting to Server")
+			newPeer := newNode(command[1], repo, false)
+			repo.Peers = append(repo.Peers, newPeer)
+		} else {
+			fmt.Println("Incorrect number of arguments")
+		}
+	case "terminate":
+		// Kill all daemons
+		return
+	case "ping":
+		fmt.Println("pong")
 
-		// If there is nothing to do, don't block
-		default:
+	case "peers":
+		fmt.Println("Connected:")
+		for _, peer := range repo.Peers {
+			fmt.Println(peer.Name)
+		}
+		fmt.Println("\nAll:")
+		for _, peer := range repo.AllPeers {
+			fmt.Println(peer)
 		}
 
-		for n := range repo.Peers {
-
-			if repo.Peers[n].Daemon == false {
-				// Start new Daemon
-				repo.Peers[n].Daemon = true
-				go func(CMDPeer *Node) {
-					fmt.Println("New Command Getter")
-					var cmd string
-					fmt.Fscanf(CMDPeer.Conn, "%s", &cmd)
-					CMDPeer.Command <- cmd
-					CMDPeer.Daemon = false
-					return
-				}(&repo.Peers[n])
-			}
-
-			select {
-			case peerCommand := <-repo.Peers[n].Command:
-				fmt.Println("recived command \"" + peerCommand + "\"")
-
-				switch peerCommand {
-				case "pull":
-					fmt.Println("Pull accepted")
-					pullAccept(repo, repo.Peers[n])
-				}
-			default:
-			}
-		}
+	default:
+		fmt.Println("Unknown command")
 	}
+
 }
 
 // TODO Pulling should come from the Owners repository
 // TODO Create an Onwer repository and delete the .tar and .tar.gz files
 
-func pullRequest(repo *Repository, peer Node) {
-	_, err := fmt.Fprintf(peer.Conn, "pull ")
-	handleError(err, "Failed to send pull command")
+func pullRequest(repo *Repository, peer *Node) {
+	peer.Write <- "pull"
 	fmt.Println("Sent pull request")
-	getRepo(repo.RepoStore+peer.Name+".tar.gz", peer.Conn)
+	peer.GetRepo(repo.RepoStore + peer.Name + ".tar.gz")
 }
 
-func pullAccept(repo *Repository, peer Node) {
-	_, err := fmt.Fprintf(peer.Conn, "Garbage ")
-	handleError(err, "Failed to send Garbage word")
-	sendRepo(repo.RepoStore+repo.Self+".tar.gz", peer.Conn)
+func pullAccept(repo *Repository, peer *Node) {
+	peer.SendRepo(repo.RepoStore+repo.Self+".tar.gz", repo)
 }

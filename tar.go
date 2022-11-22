@@ -5,70 +5,10 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
-
-func sendRepo(repoTarPath string, out net.Conn) {
-
-	// Get the size of the compressed repository
-	repoTar, err := os.Open(repoTarPath)
-	handleError(err, "Error opening repo tar file")
-	defer repoTar.Close()
-
-	// Send the size of the repository
-	fileInfo, err := repoTar.Stat()
-	handleError(err, "Error getting tarfile size")
-
-	fileSize := strconv.FormatInt(fileInfo.Size(), 10)
-
-	_, err = fmt.Fprintf(out, fileSize+" ")
-	handleError(err, "Error sending file size")
-	fmt.Println(fileSize)
-
-	// Send the compressed repository
-	sendBuffer := make([]byte, fileInfo.Size())
-	_, err = repoTar.Read(sendBuffer)
-	handleError(err, "Error reading repo into buffer")
-
-	_, err = out.Write(sendBuffer)
-	handleError(err, "Error sending data to client")
-	fmt.Println("Finished Sending File")
-}
-
-func getRepo(repoPath string, in net.Conn) {
-
-	fmt.Println("Getting Repo's size")
-	// Get the number of bytes that need to be accepted
-
-	var repoSizeString string
-	_, err := fmt.Fscanf(in, "%s", &repoSizeString)
-	handleError(err, "Failed to get repo's size")
-
-	repoSize, err := strconv.Atoi(repoSizeString)
-	handleError(err, "error converting tar size to int")
-	buffer := make([]byte, repoSize)
-
-	fmt.Println("Reading Bytes into buffer")
-	n, err := in.Read(buffer)
-	handleError(err, "Error Downloading repo")
-
-	fmt.Println("Finishded Reading Bytes into buffer")
-
-	if n != repoSize {
-		fmt.Println("Didn't recive enough bytes")
-	}
-
-	f, err := os.Create(repoPath)
-	handleError(err, "Error Creating Repository File")
-
-	defer f.Close()
-	f.Write(buffer)
-
-}
 
 func compressRepo(repoPath string, target string) error {
 
