@@ -13,6 +13,7 @@ type UserConfig struct {
 	Name     string                // User Name
 	RepoPath string                //
 	Repos    map[string]Repository //
+	Port     int
 }
 
 func startUser(reader *bufio.Reader) UserConfig {
@@ -33,6 +34,8 @@ func setupConfig(reader *bufio.Reader) UserConfig {
 	handleError(err, "Error getting Username")
 
 	config.Name = name
+
+	config.Port = 9999
 
 	config.RepoPath = "./repos/"
 	err = os.Mkdir(config.RepoPath, os.FileMode(0777))

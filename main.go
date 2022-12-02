@@ -2,17 +2,17 @@ package main
 
 import (
 	"bufio"
-	"flag"
+	"context"
 	"fmt"
 	"os"
 
 	"github.com/ipfs/go-log"
-	"github.com/libp2p/go-libp2p-core/network"
 )
 
 var logger = log.Logger("DGS")
 
-func handleStream(stream network.Stream) {
+/*
+func handleStreamOLD(stream network.Stream) {
 	logger.Info("Got a new stream!")
 
 	// Create a buffer stream for non blocking read and write.
@@ -23,6 +23,7 @@ func handleStream(stream network.Stream) {
 
 	// 'stream' will stay open until you close it (or the other side closes it).
 }
+*/
 
 func handleError(err error, message string) {
 	if err != nil {
@@ -32,17 +33,27 @@ func handleError(err error, message string) {
 }
 
 func main() {
+	log.SetAllLoggers(log.LevelWarn)
+	//log.SetLogLevel("DGS", "info")
+	log.SetLogLevel("DGS", "debug")
 
 	inputReader := bufio.NewReader(os.Stdin)
 	user := startUser(inputReader)
 	fmt.Println("Welcome back", user.Name)
+
+	fmt.Println("Starting P2P")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	host := newP2PHost(user.Port, ctx)
 
 	var repo Repository
 
 	// If there is only one repo, then open it
 	if len(user.Repos) == 1 {
 		for _, rp := range user.Repos {
-			repo = rp
+			fmt.Printf("Opening %s\n", rp.Name)
+			repo, _ = openRepository(rp.Name, user, host)
 		}
 	}
 
@@ -57,7 +68,7 @@ func main() {
 			if repo.Initilised() {
 				fmt.Println("Repo alredy initilised")
 			} else {
-				repo = newRepository(command[1], user)
+				repo = newRepository(command[1], user, host)
 
 				user.Repos[repo.Name] = repo
 				writeConfig(user)
@@ -73,7 +84,7 @@ func main() {
 			if repo.Initilised() {
 				fmt.Println("Repo alredy initilised")
 			} else {
-				repo = cloneRepository(command[1], user)
+				repo = cloneRepository(command[1], user, host)
 
 				user.Repos[repo.Name] = repo
 				writeConfig(user)
@@ -107,7 +118,7 @@ func main() {
 			fmt.Println("new PATH\nopen NAME\nclone ip:port\nclose\nexit\nconnect ip:port\naccept :port\nping")
 		default:
 			if repo.Initilised() {
-				repo.Run(command)
+				repo.Run(command, host)
 			} else {
 				fmt.Println("Unknown command\nRepo Not started")
 			}
@@ -115,6 +126,7 @@ func main() {
 	}
 }
 
+/*
 func p2pStart() {
 
 	log.SetAllLoggers(log.LevelWarn)
@@ -138,3 +150,4 @@ func p2pStart() {
 
 	connectToNetwork(host, config)
 }
+*/

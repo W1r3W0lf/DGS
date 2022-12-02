@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
+	"github.com/libp2p/go-libp2p-core/host"
 )
 
 type Repository struct {
@@ -53,7 +54,7 @@ func (repo *Repository) SetRepoSymLink(peer string) {
 	handleError(err, "Error making symlink to repo")
 }
 
-func newRepository(path string, uConfig UserConfig) Repository {
+func newRepository(path string, uConfig UserConfig, host host.Host) Repository {
 
 	var repo Repository
 
@@ -81,22 +82,28 @@ func newRepository(path string, uConfig UserConfig) Repository {
 
 	fmt.Println("DGS has been added as remote DGS in your repository")
 
+	setStreamHandler(&repo, host)
+
 	return repo
 }
 
-func openRepository(name string, config UserConfig) (Repository, error) {
+func openRepository(name string, config UserConfig, host host.Host) (Repository, error) {
 	var repo Repository
 
 	for _, rp := range config.Repos {
 		if rp.Name == name {
-			return rp, nil
+			repo = rp
+
+			setStreamHandler(&repo, host)
+
+			return repo, nil
 		}
 	}
 
 	return repo, errors.New("No such repository")
 }
 
-func cloneRepository(address string, config UserConfig) Repository {
+func cloneRepository(address string, config UserConfig, host host.Host) Repository {
 
 	var repo Repository
 	var err error
@@ -105,13 +112,16 @@ func cloneRepository(address string, config UserConfig) Repository {
 	repo.ActiveRepo = repo.Self
 
 	// Make a TCP connection to the server
-	var node Node
-	node.StartConnection(address, false)
-	node.Daemons = true
-	node.Read = make(chan string)
-	go node.ReadDaemon(&repo)
-	node.Write = make(chan string)
-	go node.WriteDaemon(&repo)
+	node := connectToPeer(&repo, host, address, true)
+	/*
+		var node Node
+		node.StartConnection(address, false)
+		node.Daemons = true
+		node.Read = make(chan string)
+		go node.ReadDaemon(&repo)
+		node.Write = make(chan string)
+		go node.WriteDaemon(&repo)
+	*/
 
 	fmt.Println("Sending Clone command")
 	// Send the clone command
@@ -120,10 +130,12 @@ func cloneRepository(address string, config UserConfig) Repository {
 	fmt.Println("Getting Server's name")
 	// Get the Repository name, and the server's peer name
 	node.Name = <-node.Read
+	fmt.Println(node.Name)
 
 	fmt.Println("Getting Repo's name")
 
 	repo.Name = <-node.Read
+	fmt.Println(repo.Name)
 
 	// make the ./repos/NAME-vs/ direcotry
 	repo.RepoStore = config.RepoPath + repo.Name + "-vs/"
@@ -160,8 +172,7 @@ func cloneRepository(address string, config UserConfig) Repository {
 	return repo
 }
 
-func (repo *Repository) Run(command []string) {
-	fmt.Println("Strting", repo.Name)
+func (repo *Repository) Run(command []string, host host.Host) {
 
 	// Execute user commands
 	switch command[0] {
@@ -177,17 +188,21 @@ func (repo *Repository) Run(command []string) {
 			fmt.Println("Incorrect number of arguments")
 		}
 	case "accept":
-		if len(command) == 2 {
-			fmt.Println("Starting Server")
-			newPeer := newNode(command[1], repo, true)
-			repo.Peers = append(repo.Peers, newPeer)
-		} else {
-			fmt.Println("Incorrect number of arguments")
-		}
+		fmt.Println("ACCEPT HAS BEEN DEPRICATED")
+		/*
+			if len(command) == 2 {
+				fmt.Println("Starting Server")
+				newPeer := newNode(command[1], repo, true)
+				repo.Peers = append(repo.Peers, newPeer)
+			} else {
+				fmt.Println("Incorrect number of arguments")
+			}
+		*/
 	case "connect":
 		if len(command) == 2 {
 			fmt.Println("Connecting to Server")
-			newPeer := newNode(command[1], repo, false)
+			//newPeer := newNode(command[1], repo, false)
+			newPeer := connectToPeer(repo, host, command[1], false)
 			repo.Peers = append(repo.Peers, newPeer)
 		} else {
 			fmt.Println("Incorrect number of arguments")

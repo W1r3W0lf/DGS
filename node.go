@@ -1,25 +1,13 @@
 package main
 
 import (
-	"bufio"
-	"context"
 	"encoding/base64"
 	"fmt"
-	"net"
 	"os"
 	"strconv"
-	"strings"
-	"sync"
 
-	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/libp2p/go-libp2p-core/protocol"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
-	"github.com/libp2p/go-libp2p-peerstore/pstoremem"
-	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
-	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
-	"github.com/multiformats/go-multiaddr"
 )
 
 type NodeP2P struct {
@@ -30,13 +18,12 @@ type NodeP2P struct {
 type Node struct {
 	Name    string
 	Address string
-	Conn    net.Conn
 	Daemons bool
-	// TODO Semaphor for network access
-	Read  chan string
-	Write chan string
+	Read    chan string
+	Write   chan string
 }
 
+/*
 func newNode(address string, repo *Repository, server bool) Node {
 	var node Node
 	node.StartConnection(address, server)
@@ -54,7 +41,9 @@ func newNode(address string, repo *Repository, server bool) Node {
 
 	return node
 }
+*/
 
+/*
 func (node *Node) StartConnection(address string, server bool) {
 	node.Address = address
 	var err error
@@ -121,6 +110,7 @@ func (node *Node) WriteDaemon(repo *Repository) {
 		}
 	}
 }
+*/
 
 func (node *Node) SendRepo(repoTarPath string, repo *Repository) {
 
@@ -288,6 +278,7 @@ func newLimiter() network.ResourceManagerState {
 }
 */
 
+/*
 func newP2PNode(config Config) host.Host {
 
 	prvKey, _ := loadKeys()
@@ -395,8 +386,8 @@ func connectToPeers(host host.Host, ctx context.Context, peerChan <-chan peer.Ad
 				rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
 				//peerList = append(peerList, rw)
 
-				go writeData(rw)
-				go readData(rw)
+				go writeDataOLD(rw)
+				go readDataOLD(rw)
 			}
 			//fmt.Println(len(peerList))
 
@@ -406,7 +397,7 @@ func connectToPeers(host host.Host, ctx context.Context, peerChan <-chan peer.Ad
 	}
 }
 
-func readData(rw *bufio.ReadWriter) {
+func readDataOLD(rw *bufio.ReadWriter) {
 	for {
 		str, err := rw.ReadString('\n')
 		handleError(err, "Error reading from buffer")
@@ -423,7 +414,7 @@ func readData(rw *bufio.ReadWriter) {
 	}
 }
 
-func writeData(rw *bufio.ReadWriter) {
+func writeDataOLD(rw *bufio.ReadWriter) {
 	stdReader := bufio.NewReader(os.Stdin)
 
 	for {
@@ -438,3 +429,5 @@ func writeData(rw *bufio.ReadWriter) {
 		handleError(err, "Error flushing buffer")
 	}
 }
+
+*/

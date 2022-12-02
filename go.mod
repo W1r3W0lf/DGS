@@ -10,6 +10,7 @@ require (
 	github.com/libp2p/go-libp2p-kad-dht v0.18.0
 	github.com/libp2p/go-libp2p-peerstore v0.8.0
 	github.com/libp2p/go-libp2p-resource-manager v0.6.0
+	github.com/libp2p/go-libp2p-tls v0.5.0
 	github.com/multiformats/go-multiaddr v0.7.0
 	github.com/pelletier/go-toml v1.2.0
 )
