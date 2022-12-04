@@ -23,95 +23,6 @@ type Node struct {
 	Write   chan string
 }
 
-/*
-func newNode(address string, repo *Repository, server bool) Node {
-	var node Node
-	node.StartConnection(address, server)
-	node.Daemons = true
-	node.Read = make(chan string)
-	go node.ReadDaemon(repo)
-	node.Write = make(chan string)
-	go node.WriteDaemon(repo)
-
-	if server {
-		node.NewServerNode(repo)
-	} else {
-		node.NewClientNode(repo)
-	}
-
-	return node
-}
-*/
-
-/*
-func (node *Node) StartConnection(address string, server bool) {
-	node.Address = address
-	var err error
-
-	if server {
-		listen, err := net.Listen("tcp", address)
-		handleError(err, "Error listaning")
-		defer listen.Close()
-
-		fmt.Println("Waiting for a Connection")
-		node.Conn, err = listen.Accept()
-		handleError(err, "Error connecting to client")
-
-	} else {
-		node.Conn, err = net.Dial("tcp", address)
-		handleError(err, "Error listaning")
-	}
-
-}
-
-func (node *Node) ReadDaemon(repo *Repository) {
-
-	var message string
-	fmt.Println("Read Daemon Strated")
-
-	for {
-		// Wait for incomming data
-		fmt.Println("Wating for a message to read")
-		_, err := fmt.Fscanf(node.Conn, "%s", &message)
-		handleError(err, "Sending message"+message)
-		message = strings.TrimSpace(message)
-
-		fmt.Println("Receved\"" + message + "\"")
-		// If that data is pull call go acceptPull
-		switch message {
-		case "pull":
-			// Launch pull process
-			go pullAccept(repo, node)
-		default:
-			// If not then pass that data into the Read Channel
-			node.Read <- message
-		}
-		if !node.Daemons {
-			return
-		}
-	}
-}
-
-func (node *Node) WriteDaemon(repo *Repository) {
-
-	var message string
-	fmt.Println("Write Daemon Strated")
-
-	for {
-		fmt.Println("Wating for a message to send")
-		message = <-node.Write
-		fmt.Println("Writting \"" + message + "\"")
-
-		_, err := fmt.Fprintf(node.Conn, message+" ")
-		handleError(err, "Reading message"+message)
-
-		if !node.Daemons {
-			return
-		}
-	}
-}
-*/
-
 func (node *Node) SendRepo(repoTarPath string, repo *Repository) {
 
 	if _, err := os.Stat(repoTarPath); err != nil {
@@ -178,6 +89,126 @@ func (node *Node) GetRepo(repoPath string) {
 	defer f.Close()
 	f.Write(buffer)
 
+}
+
+func (node *Node) NewP2PNode(repo *Repository, config *UserConfig, handler bool) {
+
+	fmt.Println("Client Connected")
+
+	var myRequest string
+
+	if repo.Initilised() || handler {
+		fmt.Println("Requested connect")
+		myRequest = "connect"
+	} else {
+		fmt.Println("Requested clone")
+		myRequest = "clone"
+	}
+	node.Write <- myRequest
+
+	// Get command from peer
+	peerRequest := <-node.Read
+
+	fmt.Println("got:", peerRequest)
+
+	if peerRequest == "clone" && myRequest == "clone" {
+		// 11
+		fmt.Println("Error, self and peer don't have repo")
+		return
+	} else if peerRequest == "clone" {
+		// 10
+		postClone(node, repo)
+	} else if myRequest == "clone" {
+		// 01
+		requestClone(node, repo, config)
+	} else {
+		//00
+		P2Pconnect(node, repo)
+	}
+}
+
+func requestClone(node *Node, repo *Repository, config *UserConfig) {
+
+	repo.Self = config.Name
+	repo.ActiveRepo = repo.Self
+
+	fmt.Println("Sending name")
+	// Send my name to peer
+	node.Write <- repo.Self
+
+	// Get peer's name
+	node.Name = <-node.Read
+
+	fmt.Println("Getting Repo's name")
+
+	repo.Name = <-node.Read
+	fmt.Println(repo.Name)
+
+	// make the ./repos/NAME-vs/ direcotry
+	repo.RepoStore = config.RepoPath + repo.Name + "-vs/"
+	err := os.Mkdir(config.RepoPath+repo.Name+"-vs/", os.FileMode(0777))
+	handleError(err, "Error Creating repo folder")
+
+	fmt.Println("Getting repo")
+	node.GetRepo(repo.RepoStore + node.Name + ".tar.gz")
+
+	// Extract compressed Repository
+	fmt.Println("Uncompressing file into ", repo.RepoStore)
+	err = uncompressRepo(repo.RepoStore+node.Name, repo.RepoStore)
+	handleError(err, "Error Extracting Repository")
+
+	// Rename direcotry to make it mine
+	err = os.Rename(repo.RepoStore+node.Name, repo.RepoStore+repo.Self)
+	handleError(err, "Error renaming the repo into my directory")
+
+	// Extract compressed Repository again to be the remote's repo
+	fmt.Println("Uncompressing file into ", repo.RepoStore)
+	err = uncompressRepo(repo.RepoStore+node.Name, repo.RepoStore)
+	handleError(err, "Error Extracting Repository")
+
+	// Add server to known peers
+	repo.AllPeers = append(repo.AllPeers, node.Name)
+
+	repo.Peers = append(repo.Peers, *node)
+
+	repo.SetRepoSymLink(repo.Self)
+
+}
+
+func postClone(node *Node, repo *Repository) {
+	fmt.Println("Sending name")
+	// Send my name to peer
+	node.Write <- repo.Self
+
+	// Get peer's name
+	node.Name = <-node.Read
+
+	fmt.Println("Sending repo name")
+	// Send repository name
+	node.Write <- repo.Name
+
+	// Compress My repository
+	fmt.Println("Compressing file")
+	err := compressRepo(repo.RepoStore+repo.Self, repo.RepoStore)
+	handleError(err, "Error compressing repo")
+
+	repoTarPath := repo.RepoStore + repo.Self + ".tar.gz"
+
+	// Send repo
+	node.SendRepo(repoTarPath, repo)
+
+	// Add client to knwon peers
+	repo.AllPeers = append(repo.AllPeers, node.Name)
+}
+
+func P2Pconnect(node *Node, repo *Repository) {
+	// Send my name to peer
+	fmt.Println("Sending name to peer")
+	node.Write <- repo.Self
+
+	// Get peer's name
+	fmt.Println("Getting peer's name")
+	node.Name = <-node.Read
 }
 
 func (node *Node) NewServerNode(repo *Repository) {
@@ -251,183 +282,3 @@ func (node *Node) NewClientNode(repo *Repository) {
 	repo.AllPeers = append(repo.AllPeers, node.Name)
 
 }
-
-/*
-func newLimiter() network.ResourceManagerState {
-
-	// Start with the default scaling limits.
-	scalingLimits := rcmgr.DefaultLimits
-
-	// Add limits around included libp2p protocols
-	libp2p.SetDefaultServiceLimits(&scalingLimits)
-
-	// Turn the scaling limits into a static set of limits using `.AutoScale`. This
-	// scales the limits proportional to your system memory.
-	limits := scalingLimits.AutoScale()
-
-	// The resource manager expects a limiter, se we create one from our limits.
-	limiter := rcmgr.NewFixedLimiter(limits)
-
-	//limiter := rcmgr.NewFixedLimiter(rcmgr.InfiniteLimits)
-
-	// Initialize the resource manager
-	rm, err := rcmgr.NewResourceManager(limiter)
-	handleError(err, "Error initalizing resource manager")
-
-	return rm
-}
-*/
-
-/*
-func newP2PNode(config Config) host.Host {
-
-	prvKey, _ := loadKeys()
-
-	//rm := newLimiter()
-
-	ps, err := pstoremem.NewPeerstore()
-
-	// libp2p.New constructs a new libp2p Host. Other options can be added
-	// here.
-	host, err := libp2p.New(
-		libp2p.ListenAddrs([]multiaddr.Multiaddr(config.ListenAddresses)...),
-		libp2p.Identity(prvKey),
-		//libp2p.ResourceManager(rm),
-		libp2p.Peerstore(ps),
-		//		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error){
-
-		//})
-	)
-	if err != nil {
-		panic(err)
-	}
-	logger.Info("Host created. We are:", host.ID())
-	logger.Info(host.Addrs())
-
-	return host
-}
-
-func connectToNetwork(host host.Host, config Config) {
-
-	// Set a function as stream handler. This function is called when a peer
-	// initiates a connection and starts a stream with this peer.
-	host.SetStreamHandler(protocol.ID(config.ProtocolID), handleStream)
-
-	// Start a DHT, for use in peer discovery. We can't just make a new DHT
-	// client because we want each peer to maintain its own local copy of the
-	// DHT, so that the bootstrapping node of the DHT can go down without
-	// inhibiting future peer discovery.
-	ctx := context.Background()
-	kademliaDHT, err := dht.New(ctx, host)
-	if err != nil {
-		panic(err)
-	}
-
-	// Bootstrap the DHT. In the default configuration, this spawns a Background
-	// thread that will refresh the peer table every five minutes.
-	logger.Debug("Bootstrapping the DHT")
-	if err = kademliaDHT.Bootstrap(ctx); err != nil {
-		panic(err)
-	}
-
-	// Let's connect to the bootstrap nodes first. They will tell us about the
-	// other nodes in the network.
-	var wg sync.WaitGroup
-	for _, peerAddr := range config.BootstrapPeers {
-		peerinfo, _ := peer.AddrInfoFromP2pAddr(peerAddr)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := host.Connect(ctx, *peerinfo); err != nil {
-				logger.Warning(err)
-			} else {
-				logger.Info("Connection established with bootstrap node:", *peerinfo)
-			}
-		}()
-	}
-	wg.Wait()
-
-	// We use a rendezvous point "meet me here" to announce our location.
-	// This is like telling your friends to meet you at the Eiffel Tower.
-	logger.Info("Announcing ourselves...")
-	routingDiscovery := drouting.NewRoutingDiscovery(kademliaDHT)
-	dutil.Advertise(ctx, routingDiscovery, config.RendezvousString)
-	logger.Debug("Successfully announced!")
-
-	// Now, look for others who have announced
-	// This is like your friend telling you the location to meet you.
-	logger.Debug("Searching for other peers...")
-	peerChan, err := routingDiscovery.FindPeers(ctx, config.RendezvousString)
-	handleError(err, "Error finding peers")
-
-	//peerList := make([]*bufio.ReadWriter, 0, 0)
-
-	connectToPeers(host, ctx, peerChan, config)
-
-}
-
-func connectToPeers(host host.Host, ctx context.Context, peerChan <-chan peer.AddrInfo, config Config) {
-
-	for {
-		select {
-		case peer := <-peerChan:
-			if peer.ID == host.ID() {
-				continue
-			}
-			logger.Debug("Found peer:", peer)
-
-			logger.Debug("Connecting to:", peer)
-			stream, err := host.NewStream(ctx, peer.ID, protocol.ID(config.ProtocolID))
-
-			if err != nil {
-				logger.Warning("Connection failed:", err)
-				continue
-			} else {
-				rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
-				//peerList = append(peerList, rw)
-
-				go writeDataOLD(rw)
-				go readDataOLD(rw)
-			}
-			//fmt.Println(len(peerList))
-
-			logger.Info("Connected to:", peer)
-
-		}
-	}
-}
-
-func readDataOLD(rw *bufio.ReadWriter) {
-	for {
-		str, err := rw.ReadString('\n')
-		handleError(err, "Error reading from buffer")
-
-		if str == "" {
-			return
-		}
-		if str != "\n" {
-			// Green console colour: 	\x1b[32m
-			// Reset console colour: 	\x1b[0m
-			fmt.Printf("\x1b[32m%s\x1b[0m> ", str)
-		}
-
-	}
-}
-
-func writeDataOLD(rw *bufio.ReadWriter) {
-	stdReader := bufio.NewReader(os.Stdin)
-
-	for {
-		fmt.Print("> ")
-		sendData, err := stdReader.ReadString('\n')
-		handleError(err, "Error reading from stdin")
-
-		_, err = rw.WriteString(fmt.Sprintf("%s\n", sendData))
-		handleError(err, "Error writting buffer")
-
-		err = rw.Flush()
-		handleError(err, "Error flushing buffer")
-	}
-}
-
-*/

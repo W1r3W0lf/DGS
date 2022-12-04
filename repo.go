@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -54,9 +55,7 @@ func (repo *Repository) SetRepoSymLink(peer string) {
 	handleError(err, "Error making symlink to repo")
 }
 
-func newRepository(path string, uConfig UserConfig, host host.Host) Repository {
-
-	var repo Repository
+func (repo *Repository) newRepository(path string, uConfig UserConfig, host host.Host) {
 
 	repo.Name = filepath.Base(path)
 	repo.Self = uConfig.Name
@@ -82,28 +81,39 @@ func newRepository(path string, uConfig UserConfig, host host.Host) Repository {
 
 	fmt.Println("DGS has been added as remote DGS in your repository")
 
-	setStreamHandler(&repo, host)
+	setStreamHandler(repo, host, &uConfig)
+}
+
+func (repo *Repository) openRepository(name string, config *UserConfig, host host.Host, ctx context.Context) error {
+
+	for _, rp := range config.Repos {
+		if rp.Name == name {
+			*repo = rp
+
+			setStreamHandler(repo, host, config)
+
+			initMDNS(host, ctx, repo, config)
+
+			return nil
+		}
+	}
+
+	return errors.New("No such repository")
+}
+
+func P2PCloneRepository(address string, config *UserConfig, host host.Host, ctx context.Context) Repository {
+	var repo Repository
+
+	repo.Name = address
+
+	setStreamHandler(&repo, host, config)
+
+	initMDNS(host, ctx, &repo, config)
 
 	return repo
 }
 
-func openRepository(name string, config UserConfig, host host.Host) (Repository, error) {
-	var repo Repository
-
-	for _, rp := range config.Repos {
-		if rp.Name == name {
-			repo = rp
-
-			setStreamHandler(&repo, host)
-
-			return repo, nil
-		}
-	}
-
-	return repo, errors.New("No such repository")
-}
-
-func cloneRepository(address string, config UserConfig, host host.Host) Repository {
+func cloneRepository(address string, config UserConfig, host host.Host, ctx context.Context) Repository {
 
 	var repo Repository
 	var err error
@@ -113,15 +123,6 @@ func cloneRepository(address string, config UserConfig, host host.Host) Reposito
 
 	// Make a TCP connection to the server
 	node := connectToPeer(&repo, host, address, true)
-	/*
-		var node Node
-		node.StartConnection(address, false)
-		node.Daemons = true
-		node.Read = make(chan string)
-		go node.ReadDaemon(&repo)
-		node.Write = make(chan string)
-		go node.WriteDaemon(&repo)
-	*/
 
 	fmt.Println("Sending Clone command")
 	// Send the clone command
@@ -218,6 +219,7 @@ func (repo *Repository) Run(command []string, host host.Host) {
 		for _, peer := range repo.Peers {
 			fmt.Println(peer.Name)
 		}
+		fmt.Printf("Connected to %d peers\n", len(repo.Peers))
 		fmt.Println("\nAll:")
 		for _, peer := range repo.AllPeers {
 			fmt.Println(peer)
@@ -239,5 +241,6 @@ func pullRequest(repo *Repository, peer *Node) {
 }
 
 func pullAccept(repo *Repository, peer *Node) {
+	fmt.Println("Accepting pull request")
 	peer.SendRepo(repo.RepoStore+repo.Self+".tar.gz", repo)
 }

@@ -14,6 +14,7 @@ import (
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	libp2ptls "github.com/libp2p/go-libp2p-tls"
 	"github.com/libp2p/go-libp2p/core/peerstore"
+	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	"github.com/multiformats/go-multiaddr"
 )
@@ -58,22 +59,10 @@ func newP2PHost(port int, ctx context.Context) host.Host {
 	fmt.Println("PeerID:", host.ID())
 	fmt.Printf("/ip4/127.0.0.1/tcp/%v/p2p/%s\n", port, host.ID().Pretty())
 
-	var po string
-	for _, la := range host.Network().ListenAddresses() {
-		if p, err := la.ValueForProtocol(multiaddr.P_TCP); err == nil {
-			po = p
-			break
-		}
-	}
-
-	if po == "" {
-		fmt.Println("Unable to find local port")
-	}
-	fmt.Printf("%s\n", po)
-
 	return host
 }
 
+// This function won't be called
 func connectToPeer(repo *Repository, host host.Host, address string, clone bool) Node {
 	var node Node
 
@@ -122,7 +111,13 @@ func hostPort(host host.Host) {
 	fmt.Printf("%s\n", port)
 }
 
-func setStreamHandler(repo *Repository, host host.Host) {
+func makeBob() Node {
+	var bob Node
+	bob.Name = "Bob"
+	return bob
+}
+
+func setStreamHandler(repo *Repository, host host.Host, config *UserConfig) {
 
 	var port string
 	for _, la := range host.Network().ListenAddresses() {
@@ -142,6 +137,7 @@ func setStreamHandler(repo *Repository, host host.Host) {
 	host.SetStreamHandler("/dgs/0.1.0",
 		func(stream network.Stream) {
 			logger.Info("Got a new peer!")
+
 			var node Node
 
 			rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
@@ -153,10 +149,12 @@ func setStreamHandler(repo *Repository, host host.Host) {
 			node.Write = make(chan string)
 			go writeData(rw, &node)
 
-			node.NewServerNode(repo)
+			fmt.Println("Stream handler making peeer")
+			node.NewP2PNode(repo, config, true)
 
 			fmt.Printf("/ip4/127.0.0.1/tcp/%v/p2p/%s \n", port, host.ID().Pretty())
 
+			logger.Info("Appending peer to peer list")
 			repo.Peers = append(repo.Peers, node)
 		})
 
@@ -166,21 +164,54 @@ func setStreamHandler(repo *Repository, host host.Host) {
 
 }
 
-/*
-func handleStream(stream network.Stream) {
-	logger.Info("Got a new peer!")
-	var node Node
+func initMDNS(host host.Host, ctx context.Context, repo *Repository, config *UserConfig) {
+	n := &newMDNSpeer{}
+	n.PeerChan = make(chan peer.AddrInfo)
+	ser := mdns.NewMdnsService(host, repo.Name, n)
+	err := ser.Start()
+	handleError(err, "Error creating MDNS service")
 
-	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
-
-	node.Read = make(chan string)
-	go readData(rw, node)
-	node.Write = make(chan string)
-	go writeData(rw, node)
-
-	// 'stream' will stay open until you close it (or the other side closes it).
+	go MDNSdaemon(host, repo, ctx, n.PeerChan, config)
 }
-*/
+
+func MDNSdaemon(host host.Host, repo *Repository, ctx context.Context, peerChan chan peer.AddrInfo, config *UserConfig) {
+	for {
+		select {
+		case peer := <-peerChan:
+			logger.Info("Got a new MDNS peer!")
+			var node Node
+
+			err := host.Connect(ctx, peer)
+			handleError(err, "Error connecting to MDNDS peer")
+
+			stream, err := host.NewStream(context.Background(), peer.ID, "/dgs/0.1.0")
+			handleError(err, "Error makeing a stream to peer")
+
+			rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
+
+			node.Daemons = true
+
+			node.Read = make(chan string)
+			go readData(rw, &node, repo)
+			node.Write = make(chan string)
+			go writeData(rw, &node)
+
+			fmt.Println("MDNS daemon making peeer")
+			node.NewP2PNode(repo, config, false)
+
+			//logger.Info("Appending peer to peer list")
+			//repo.Peers = append(repo.Peers, node)
+		}
+	}
+}
+
+type newMDNSpeer struct {
+	PeerChan chan peer.AddrInfo
+}
+
+func (n *newMDNSpeer) HandlePeerFound(peerInfo peer.AddrInfo) {
+	n.PeerChan <- peerInfo
+}
 
 func readData(rw *bufio.ReadWriter, node *Node, repo *Repository) {
 	for {
@@ -224,29 +255,3 @@ func writeData(rw *bufio.ReadWriter, node *Node) {
 		*/
 	}
 }
-
-/*
-func newLimiter() network.ResourceManagerState {
-
-	// Start with the default scaling limits.
-	scalingLimits := rcmgr.DefaultLimits
-
-	// Add limits around included libp2p protocols
-	libp2p.SetDefaultServiceLimits(&scalingLimits)
-
-	// Turn the scaling limits into a static set of limits using `.AutoScale`. This
-	// scales the limits proportional to your system memory.
-	limits := scalingLimits.AutoScale()
-
-	// The resource manager expects a limiter, se we create one from our limits.
-	limiter := rcmgr.NewFixedLimiter(limits)
-
-	//limiter := rcmgr.NewFixedLimiter(rcmgr.InfiniteLimits)
-
-	// Initialize the resource manager
-	rm, err := rcmgr.NewResourceManager(limiter)
-	handleError(err, "Error initalizing resource manager")
-
-	return rm
-}
-*/

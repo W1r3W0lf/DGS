@@ -11,20 +11,6 @@ import (
 
 var logger = log.Logger("DGS")
 
-/*
-func handleStreamOLD(stream network.Stream) {
-	logger.Info("Got a new stream!")
-
-	// Create a buffer stream for non blocking read and write.
-	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
-
-	go readData(rw)
-	go writeData(rw)
-
-	// 'stream' will stay open until you close it (or the other side closes it).
-}
-*/
-
 func handleError(err error, message string) {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, message)
@@ -53,7 +39,7 @@ func main() {
 	if len(user.Repos) == 1 {
 		for _, rp := range user.Repos {
 			fmt.Printf("Opening %s\n", rp.Name)
-			repo, _ = openRepository(rp.Name, user, host)
+			repo.openRepository(rp.Name, &user, host, ctx)
 		}
 	}
 
@@ -68,7 +54,7 @@ func main() {
 			if repo.Initilised() {
 				fmt.Println("Repo alredy initilised")
 			} else {
-				repo = newRepository(command[1], user, host)
+				repo.newRepository(command[1], user, host)
 
 				user.Repos[repo.Name] = repo
 				writeConfig(user)
@@ -84,10 +70,17 @@ func main() {
 			if repo.Initilised() {
 				fmt.Println("Repo alredy initilised")
 			} else {
-				repo = cloneRepository(command[1], user, host)
+				repo.Name = command[1]
 
-				user.Repos[repo.Name] = repo
-				writeConfig(user)
+				setStreamHandler(&repo, host, &user)
+
+				initMDNS(host, ctx, &repo, &user)
+				/*
+					repo = cloneRepository(command[1], user, host, ctx)
+
+					user.Repos[repo.Name] = repo
+					writeConfig(user)
+				*/
 
 			}
 		case "close":
@@ -125,29 +118,3 @@ func main() {
 		}
 	}
 }
-
-/*
-func p2pStart() {
-
-	log.SetAllLoggers(log.LevelWarn)
-	//log.SetLogLevel("DGS", "info")
-	log.SetLogLevel("DGS", "debug")
-	help := flag.Bool("h", false, "Display Help")
-	config, err := ParseFlags()
-	if err != nil {
-		panic(err)
-	}
-
-	if *help {
-		fmt.Println("This program demonstrates a simple p2p chat application using libp2p")
-		fmt.Println()
-		fmt.Println("Usage: Run './chat in two different terminals. Let them connect to the bootstrap nodes, announce themselves and connect to the peers")
-		flag.PrintDefaults()
-		return
-	}
-
-	host := newP2PNode(config)
-
-	connectToNetwork(host, config)
-}
-*/
