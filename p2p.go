@@ -197,10 +197,10 @@ func MDNSdaemon(host host.Host, repo *Repository, ctx context.Context, peerChan 
 			go writeData(rw, &node)
 
 			fmt.Println("MDNS daemon making peeer")
-			node.NewP2PNode(repo, config, false)
+			node.NewP2PNode(repo, config, true)
 
 			//logger.Info("Appending peer to peer list")
-			//repo.Peers = append(repo.Peers, node)
+			repo.Peers = append(repo.Peers, node)
 		}
 	}
 }
