@@ -150,7 +150,7 @@ func setStreamHandler(repo *Repository, host host.Host, config *UserConfig) {
 			go writeData(rw, &node)
 
 			fmt.Println("Stream handler making peeer")
-			node.NewP2PNode(repo, config, true)
+			node.NewP2PNode(repo, config, false)
 
 			fmt.Printf("/ip4/127.0.0.1/tcp/%v/p2p/%s \n", port, host.ID().Pretty())
 
