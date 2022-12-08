@@ -252,6 +252,7 @@ func (node *Node) NewServerNode(repo *Repository) {
 		// Get client's name
 		fmt.Println("Getting peer's name")
 		node.Name = <-node.Read
+		fmt.Println(node.Name)
 
 		// maybe? I'm not shure about this yet
 		// Search for the client's name
