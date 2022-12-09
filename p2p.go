@@ -57,7 +57,7 @@ func newP2PHost(port int, ctx context.Context) host.Host {
 	handleError(err, "Error creaging host")
 
 	fmt.Println("PeerID:", host.ID())
-	fmt.Printf("/ip4/127.0.0.1/tcp/%v/p2p/%s\n", port, host.ID().Pretty())
+	//fmt.Printf("/ip4/127.0.0.1/tcp/%v/p2p/%s\n", port, host.ID().Pretty())
 
 	return host
 }

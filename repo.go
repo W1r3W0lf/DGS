@@ -51,6 +51,10 @@ func (repo *Repository) SetRepoSymLink(peer string) {
 	destination, err := filepath.Abs(repo.RepoStore[:len(repo.RepoStore)-4])
 	handleError(err, "Error getting an absolute path")
 
+	if _, err := os.Stat(destination); err == nil {
+		os.Remove(destination)
+	}
+
 	err = os.Symlink(target, destination)
 	handleError(err, "Error making symlink to repo")
 }
@@ -214,6 +218,10 @@ func (repo *Repository) Run(command []string, host host.Host) {
 	case "ping":
 		fmt.Println("pong")
 
+	case "use":
+		repo.ActiveRepo = command[1]
+		repo.SetRepoSymLink(command[1])
+
 	case "peers":
 		fmt.Println("Connected:")
 		for _, peer := range repo.Peers {
@@ -238,6 +246,9 @@ func pullRequest(repo *Repository, peer *Node) {
 	peer.Write <- "pull"
 	fmt.Println("Sent pull request")
 	peer.GetRepo(repo.RepoStore + peer.Name + ".tar.gz")
+	os.RemoveAll(repo.RepoStore + peer.Name)
+	err := uncompressRepo(repo.RepoStore+peer.Name, repo.RepoStore)
+	handleError(err, "Error Extracting Repository")
 }
 
 func pullAccept(repo *Repository, peer *Node) {

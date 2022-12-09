@@ -25,6 +25,9 @@ type Node struct {
 
 func (node *Node) SendRepo(repoTarPath string, repo *Repository) {
 
+	os.Remove(repoTarPath)
+	os.Remove(repoTarPath[:len(repoTarPath)-4])
+
 	if _, err := os.Stat(repoTarPath); err != nil {
 		fmt.Println("Compressing file")
 		err := compressRepo(repo.RepoStore+repo.Self, repo.RepoStore)
